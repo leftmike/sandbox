@@ -103,13 +103,19 @@ func IoctlNotifRecv(fd int, cancelFd int) (*Notif, error) {
 }
 
 func ReadMemory(fd int, notif *Notif, addr, size uintptr) ([]byte, error) {
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
+		uintptr(unsafe.Pointer(&notif.ID)))
+	if errno != 0 {
+		return nil, errno
+	}
+
 	f, err := os.OpenFile(fmt.Sprintf("/proc/%d/mem", notif.PID), os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
+	_, _, errno = unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
 		uintptr(unsafe.Pointer(&notif.ID)))
 	if errno != 0 {
 		return nil, errno
