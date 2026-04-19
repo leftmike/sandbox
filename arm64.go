@@ -11,8 +11,11 @@ const (
 	auditArch = unix.AUDIT_ARCH_AARCH64
 )
 
-func handleNotifArch(fd int, ntf *notif, h Handler) bool {
-	return h.Syscall(ntf.pid, int(ntf.data.nr))
+func handleNotifArch(fd int, ntf *notif, h Handler) *notifResp {
+	if !h.Syscall(ntf.pid, int(ntf.data.nr)) {
+		return &notifResp{id: ntf.id, errno: -int32(unix.EACCES)}
+	}
+	return &notifResp{id: ntf.id, flags: unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE}
 }
 
 var (
