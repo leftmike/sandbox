@@ -152,6 +152,43 @@ func ReadString(fd int, notif *Notif, addr, size uintptr) (string, error) {
 	return "", errors.New("string not NUL terminated")
 }
 
+// NotifAddFd is the argument to SECCOMP_IOCTL_NOTIF_ADDFD.
+type NotifAddFd struct {
+	ID         uint64
+	Flags      uint32
+	SrcFd      uint32
+	NewFd      uint32
+	NewFdFlags uint32
+}
+
+const (
+	// SECCOMP_IOCTL_NOTIF_ADDFD = _IOW('!', 3, struct seccomp_notif_addfd)
+	ioctlNotifAddFd = 0x40182103
+	// AddFdFlagSend is SECCOMP_ADDFD_FLAG_SEND: atomically add the fd and
+	// send the notification response so the child receives the new fd number
+	// as the return value of its blocked syscall.
+	AddFdFlagSend = uint32(2)
+)
+
+// IoctlNotifAddFd injects srcFd into the notified process's fd table.
+// When flags includes AddFdFlagSend the notification response is sent
+// atomically, making this the sole response for that notification.
+// Returns the fd number installed in the target process.
+func IoctlNotifAddFd(fd int, id uint64, srcFd int, flags, newFdFlags uint32) (int, error) {
+	addfd := NotifAddFd{
+		ID:         id,
+		Flags:      flags,
+		SrcFd:      uint32(srcFd),
+		NewFdFlags: newFdFlags,
+	}
+	r, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), ioctlNotifAddFd,
+		uintptr(unsafe.Pointer(&addfd)))
+	if errno != 0 {
+		return -1, errno
+	}
+	return int(r), nil
+}
+
 func IoctlNotifSend(fd int, rsp NotifResp) error {
 	buf := make([]byte, notifRespSize)
 	*(*NotifResp)(unsafe.Pointer(&buf[0])) = rsp
