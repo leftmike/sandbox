@@ -69,11 +69,11 @@ type NotifResp struct {
 	Flags uint32
 }
 
-func IoctlNotifRecv(fd int, exitFd int) (*Notif, error) {
+func IoctlNotifRecv(fd int, cancelFd int) (*Notif, error) {
 	buf := make([]byte, notifSize)
 	pfds := []unix.PollFd{
 		{Fd: int32(fd), Events: unix.POLLIN},
-		{Fd: int32(exitFd), Events: unix.POLLIN},
+		{Fd: int32(cancelFd), Events: unix.POLLIN},
 	}
 	for {
 		_, err := unix.Poll(pfds, -1)
