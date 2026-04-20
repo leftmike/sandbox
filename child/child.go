@@ -85,7 +85,7 @@ func main() {
 		os.Exit(shared.SendmsgFailed)
 	}
 
-	err = unix.Exec(os.Args[1], os.Args[2:], os.Environ())
+	err = unix.Exec(os.Args[1], os.Args[1:], os.Environ())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: exec(%v): %s\n", os.Args[1:], err)
 		os.Exit(shared.ExecCommandFailed)
