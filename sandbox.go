@@ -62,34 +62,14 @@ func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCal
 		listen(fd, pipe[0], sch)
 	}()
 
-	// XXX: handle the error from cmd.Wait()
-	cmd.Wait()
+	err = cmd.Wait()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode(), nil
+		}
+		return 0, err
+	}
 	return 0, nil
-	/*
-		// Run supervisor in background; it exits when the child dies and the kernel
-		// closes the listener fd (RECV returns ENOENT).
-		supErrCh := make(chan error, 1)
-		go func() {
-			supErrCh <- supervise(listenerFd, sch)
-		}()
-
-		waitErr := cmd.Wait()
-		unix.Close(listenerFd) // wake supervisor if still blocked on RECV
-		supErr := <-supErrCh
-
-		code := 0
-		if waitErr != nil {
-			if exitErr, ok := waitErr.(*exec.ExitError); ok {
-				code = exitErr.ExitCode()
-			} else {
-				return 0, fmt.Errorf("sandbox: wait: %w", waitErr)
-			}
-		}
-		if supErr != nil {
-			return code, supErr
-		}
-		return code, nil
-	*/
 }
 
 func recvmsg(f *os.File, buf []byte) ([]byte, error) {
