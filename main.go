@@ -1,8 +1,3 @@
-/*
-- cmd.Process.Kill(): kill all children too
-- cmd.Wait(): when it returns, make sure all children have been killed too
-- handle errors from listen by killing all children
-*/
 package main
 
 import (

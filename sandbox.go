@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -40,6 +42,7 @@ func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCal
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.ExtraFiles = []*os.File{cf}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	err = cmd.Start()
 	cf.Close()
@@ -57,12 +60,23 @@ func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCal
 	}
 	defer unix.Close(fd)
 
+	ch := make(chan error, 2)
 	go func() {
-		// XXX: err from listen
-		listen(fd, pipe[0], sch)
+		ch <- listen(fd, pipe[0], sch)
 	}()
 
-	err = cmd.Wait()
+	go func() {
+		ch <- cmd.Wait()
+	}()
+
+	err = <-ch
+
+	syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	go func() {
+		time.Sleep(time.Second)
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}()
+
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode(), nil
@@ -115,9 +129,9 @@ func recvFd(f *os.File) (int, error) {
 	return -1, errors.New("sandbox: no fd from child")
 }
 
-func listen(fd int, shutdownFd int, sch SysCallHandler) error {
+func listen(fd int, cancelFd int, sch SysCallHandler) error {
 	for {
-		notif, err := seccomp.IoctlNotifRecv(fd, shutdownFd)
+		notif, err := seccomp.IoctlNotifRecv(fd, cancelFd)
 		if err != nil || notif == nil {
 			return err
 		}
