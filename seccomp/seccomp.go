@@ -69,15 +69,30 @@ type NotifResp struct {
 	Flags uint32
 }
 
-func IoctlNotifRecv(fd int) (*Notif, error) {
+func IoctlNotifRecv(fd int, exitFd int) (*Notif, error) {
 	buf := make([]byte, notifSize)
+	pfds := []unix.PollFd{
+		{Fd: int32(fd), Events: unix.POLLIN},
+		{Fd: int32(exitFd), Events: unix.POLLIN},
+	}
 	for {
+		_, err := unix.Poll(pfds, -1)
+		if err != nil {
+			if errors.Is(err, unix.EINTR) {
+				continue
+			}
+			return nil, err
+		} else if pfds[0].Revents&(unix.POLLHUP|unix.POLLERR) != 0 {
+			return nil, nil
+		} else if pfds[1].Revents&unix.POLLIN != 0 {
+			return nil, nil
+		}
+
 		_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_RECV,
 			uintptr(unsafe.Pointer(&buf[0])))
 		if errno == 0 {
 			break
 		} else if errors.Is(errno, unix.ENOENT) || errors.Is(errno, unix.EBADF) {
-			// ENOENT: child exited; EBADF: we closed the fd after child exit.
 			return nil, nil
 		} else if !errors.Is(errno, unix.EINTR) {
 			return nil, errno

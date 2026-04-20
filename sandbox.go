@@ -16,6 +16,14 @@ type SysCallHandler func(fd int, notif *seccomp.Notif) bool
 func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCallHandler) (int,
 	error) {
 
+	pipe := []int{-1, -1}
+	err := unix.Pipe2(pipe, unix.O_CLOEXEC)
+	if err != nil {
+		return 0, err
+	}
+	defer unix.Close(pipe[0])
+	defer unix.Close(pipe[1])
+
 	sp, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
 		return 0, err
@@ -28,10 +36,10 @@ func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCal
 
 	cmd := exec.Command("child/child")
 	cmd.Args = append([]string{"child/child"}, cmdArgs...)
-	cmd.ExtraFiles = []*os.File{cf}
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	cmd.ExtraFiles = []*os.File{cf}
 
 	err = cmd.Start()
 	cf.Close()
@@ -43,19 +51,19 @@ func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCal
 
 	fd, err := recvFd(pf)
 	if err != nil {
-		// XXX
 		cmd.Process.Kill()
 		cmd.Wait()
 		return 0, err
 	}
+	defer unix.Close(fd)
 
 	go func() {
-		// XXX: handle the error from cmd.Wait()
-		cmd.Wait()
-		unix.Close(fd)
+		// XXX: err from listen
+		listen(fd, pipe[0], sch)
 	}()
 
-	listen(fd, sch)
+	// XXX: handle the error from cmd.Wait()
+	cmd.Wait()
 	return 0, nil
 	/*
 		// Run supervisor in background; it exits when the child dies and the kernel
@@ -127,9 +135,9 @@ func recvFd(f *os.File) (int, error) {
 	return -1, errors.New("sandbox: no fd from child")
 }
 
-func listen(fd int, sch SysCallHandler) error {
+func listen(fd int, shutdownFd int, sch SysCallHandler) error {
 	for {
-		notif, err := seccomp.IoctlNotifRecv(fd)
+		notif, err := seccomp.IoctlNotifRecv(fd, shutdownFd)
 		if err != nil || notif == nil {
 			return err
 		}
