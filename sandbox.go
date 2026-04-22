@@ -62,7 +62,10 @@ func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCal
 
 	ch := make(chan error, 2)
 	go func() {
-		ch <- listen(fd, pipe[0], sch)
+		err := listen(fd, pipe[0], sch)
+		if err != nil {
+			ch <- err
+		}
 	}()
 
 	go func() {
