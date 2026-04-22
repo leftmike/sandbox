@@ -4,36 +4,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-
-	"golang.org/x/sys/unix"
-
-	"github.com/leftmike/sandbox/seccomp"
 )
 
-func handler(fd int, notif *seccomp.Notif) bool {
-	switch notif.Data.NR {
-	case unix.SYS_OPENAT:
-		path, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
-		if err != nil {
-			fmt.Printf("openat: read string: %s\n", err)
-			return false
-		}
-		fmt.Printf("%d: openat(%s, %x, %x)\n", notif.PID, path, int32(notif.Data.Args[2]),
-			uint32(notif.Data.Args[3]))
+type syscallHandler struct{}
 
-	case unix.SYS_OPEN:
-		path, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
-		if err != nil {
-			fmt.Printf("open: read string: %s\n", err)
-			return false
-		}
-		fmt.Printf("%d: open(%s, %x, %x)\n", notif.PID, path, int32(notif.Data.Args[1]),
-			uint32(notif.Data.Args[2]))
+func (_ syscallHandler) Open(pid uint32, pathname string, flags int32, mode uint32) bool {
+	fmt.Printf("%d: openat(%s, %x, %x)\n", pid, pathname, flags, mode)
+	return true
+}
 
-	default:
-		fmt.Printf("syscall: %d\n", notif.Data.NR)
-	}
-
+func (_ syscallHandler) Syscall(pid uint32, nr int32) bool {
+	fmt.Printf("%d: syscall: %d\n", pid, nr)
 	return true
 }
 
@@ -43,6 +24,6 @@ func main() {
 	}
 
 	fmt.Println(os.Args[1:])
-	ret, err := Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, handler)
+	ret, err := Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, syscallHandler{})
 	fmt.Printf("%s: %d, %s\n", os.Args[1], ret, err)
 }

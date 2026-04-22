@@ -8,21 +8,27 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
-
-	"github.com/leftmike/sandbox/seccomp"
-	"golang.org/x/sys/unix"
 )
 
-func TestMain(m *testing.M) {
-	cmd := exec.Command("go", "build", "-o", "child/child", "./child/")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to build child binary: %s\n", err)
-		os.Exit(1)
+type testHandler struct {
+	open    func(pid uint32, pathname string, flags int32, mode uint32) bool
+	syscall func(pid uint32, nr int32) bool
+}
+
+func (th testHandler) Open(pid uint32, pathname string, flags int32, mode uint32) bool {
+	if th.open != nil {
+		return th.open(pid, pathname, flags, mode)
 	}
-	os.Exit(m.Run())
+
+	return true
+}
+
+func (th testHandler) Syscall(pid uint32, nr int32) bool {
+	if th.syscall != nil {
+		return th.syscall(pid, nr)
+	}
+
+	return true
 }
 
 func TestRun(t *testing.T) {
@@ -35,10 +41,7 @@ func TestRun(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		ret, err := Run([]string{c.cmd}, nil, io.Discard, io.Discard,
-			func(_ int, _ *seccomp.Notif) bool {
-				return true
-			})
+		ret, err := Run([]string{c.cmd}, nil, io.Discard, io.Discard, testHandler{})
 		if err != nil {
 			t.Errorf("Run(%s) failed with %s", c.cmd, err)
 		} else if ret != c.ret {
@@ -47,9 +50,8 @@ func TestRun(t *testing.T) {
 	}
 }
 
-// TestRunInterceptOpenat verifies openat syscalls are intercepted and the path is readable.
-func TestRunInterceptOpenat(t *testing.T) {
-	f, err := os.CreateTemp("", "sandbox-e2e-*")
+func TestRunOpen(t *testing.T) {
+	f, err := os.CreateTemp("", "sandbox-open")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,67 +59,53 @@ func TestRunInterceptOpenat(t *testing.T) {
 	f.Close()
 	defer os.Remove(f.Name())
 
-	var intercepted []string
-	var out bytes.Buffer
-
-	ret, err := Run([]string{"/bin/cat", f.Name()}, nil, &out, &out,
-		func(fd int, notif *seccomp.Notif) bool {
-			if notif.Data.NR == unix.SYS_OPENAT {
-				path, rerr := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
-				if rerr == nil {
-					intercepted = append(intercepted, path)
+	var found bool
+	var buf bytes.Buffer
+	ret, err := Run([]string{"/bin/cat", f.Name()}, nil, &buf, io.Discard,
+		testHandler{
+			open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+				if pathname == f.Name() {
+					found = true
 				}
-			}
-			return true
+
+				return true
+			},
 		})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ret != 0 {
-		t.Fatalf("expected exit code 0, got %d (output: %s)", ret, out.String())
-	}
-	if !strings.Contains(out.String(), "hello sandbox") {
-		t.Fatalf("unexpected output: %q", out.String())
+		t.Errorf("Run() failed with %s", err)
+	} else if ret != 0 {
+		t.Errorf("Run() got %d want 0", ret)
+	} else if !strings.Contains(buf.String(), "hello sandbox") {
+		t.Errorf("Run() missing output: %s", buf.String())
+	} else if !found {
+		t.Errorf("Run() %s not handled", f.Name())
 	}
 
-	found := false
-	for _, p := range intercepted {
-		if p == f.Name() {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("temp file not intercepted; got paths: %v", intercepted)
+	ret, err = Run([]string{"/bin/cat", f.Name()}, nil, io.Discard, io.Discard,
+		testHandler{
+			open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+				if pathname == f.Name() {
+					return false
+				}
+
+				return true
+			},
+		})
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret == 0 {
+		t.Errorf("Run() got %d want not 0", ret)
 	}
 }
 
-// TestRunDenyOpenat verifies that denying an openat syscall causes the process to fail.
-func TestRunDenyOpenat(t *testing.T) {
-	f, err := os.CreateTemp("", "sandbox-e2e-*")
+func TestMain(m *testing.M) {
+	cmd := exec.Command("go", "build", "-o", "child/child", "./child/")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
 	if err != nil {
-		t.Fatal(err)
+		fmt.Fprintf(os.Stderr, "failed to build child binary: %s\n", err)
+		os.Exit(1)
 	}
-	f.Close()
-	defer os.Remove(f.Name())
-
-	targetPath := f.Name()
-	var out bytes.Buffer
-
-	ret, err := Run([]string{"/bin/cat", targetPath}, nil, io.Discard, &out,
-		func(fd int, notif *seccomp.Notif) bool {
-			if notif.Data.NR == unix.SYS_OPENAT {
-				path, rerr := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
-				if rerr == nil && path == targetPath {
-					return false // deny
-				}
-			}
-			return true
-		})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if ret == 0 {
-		t.Fatal("expected non-zero exit code when file open is denied")
-	}
+	os.Exit(m.Run())
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -15,7 +16,12 @@ import (
 
 type SysCallHandler func(fd int, notif *seccomp.Notif) bool
 
-func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCallHandler) (int,
+type Handler interface {
+	Open(pid uint32, filename string, flags int32, mode uint32) bool
+	Syscall(pid uint32, nr int32) bool
+}
+
+func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, h Handler) (int,
 	error) {
 
 	pipe := []int{-1, -1}
@@ -62,7 +68,7 @@ func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, sch SysCal
 
 	ch := make(chan error, 2)
 	go func() {
-		err := listen(fd, pipe[0], sch)
+		err := listen(fd, pipe[0], h)
 		if err != nil {
 			ch <- err
 		}
@@ -132,14 +138,14 @@ func recvFd(f *os.File) (int, error) {
 	return -1, errors.New("sandbox: no fd from child")
 }
 
-func listen(fd int, cancelFd int, sch SysCallHandler) error {
+func listen(fd int, cancelFd int, h Handler) error {
 	for {
 		notif, err := seccomp.IoctlNotifRecv(fd, cancelFd)
 		if err != nil || notif == nil {
 			return err
 		}
 
-		allowed := sch(fd, notif)
+		allowed := handler(fd, notif, h)
 
 		rsp := seccomp.NotifResp{ID: notif.ID}
 		if allowed {
@@ -152,5 +158,28 @@ func listen(fd int, cancelFd int, sch SysCallHandler) error {
 		if err != nil {
 			return err
 		}
+	}
+}
+
+func handler(fd int, notif *seccomp.Notif, h Handler) bool {
+	switch notif.Data.NR {
+	case unix.SYS_OPENAT:
+		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
+		if err != nil {
+			fmt.Printf("openat: read string: %s\n", err)
+			return false
+		}
+		return h.Open(notif.PID, pathname, int32(notif.Data.Args[2]), uint32(notif.Data.Args[3]))
+
+	case unix.SYS_OPEN:
+		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
+		if err != nil {
+			fmt.Printf("open: read string: %s\n", err)
+			return false
+		}
+		return h.Open(notif.PID, pathname, int32(notif.Data.Args[1]), uint32(notif.Data.Args[2]))
+
+	default:
+		return h.Syscall(notif.PID, notif.Data.NR)
 	}
 }
