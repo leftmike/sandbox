@@ -40,8 +40,6 @@ func (cmd *Cmd) CombinedOutput() ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-// func (cmd *Cmd) Environ() []string
-
 func (cmd *Cmd) Output() ([]byte, error) {
 	// Copied from https://cs.opensource.google/go/go/+/master:src/os/exec/exec.go
 	if cmd.Stdout != nil {
