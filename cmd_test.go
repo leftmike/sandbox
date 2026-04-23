@@ -105,6 +105,13 @@ func TestCmdEnvironPassthrough(t *testing.T) {
 	}
 }
 
+func TestCmdString(t *testing.T) {
+	cmd := Command("/usr/bin/echo", "hello", "world")
+	if got, want := cmd.String(), "/usr/bin/echo hello world"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
 func TestCmdStdoutPipe(t *testing.T) {
 	cmd := Command("/usr/bin/echo", "hello")
 	pipe, err := cmd.StdoutPipe()

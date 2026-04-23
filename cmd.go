@@ -82,11 +82,6 @@ func (cmd *Cmd) Start() error {
 	return nil
 }
 
-// XXX: func (cmd *Cmd) StderrPipe() (io.ReadCloser, error)
-// XXX: func (cmd *Cmd) StdinPipe() (io.WriteCloser, error)
-// XXX: func (cmd *Cmd) StdoutPipe() (io.ReadCloser, error)
-// XXX: func (cmd *Cmd) String() string
-
 func (cmd *Cmd) Wait() error {
 	err := cmd.Cmd.Wait() // XXX
 	return err
