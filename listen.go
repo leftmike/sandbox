@@ -78,13 +78,21 @@ func listen(fd int, cancelFd int, h Handler) error {
 
 func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 	switch notif.Data.NR {
-	case unix.SYS_OPENAT:
-		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
+	case unix.SYS_EXECVE:
+		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
 		if err != nil {
-			fmt.Printf("openat: read string: %s\n", err)
+			fmt.Printf("execve: read string: %s\n", err)
 			return false
 		}
-		return h.Open(notif.PID, pathname, int32(notif.Data.Args[2]), uint32(notif.Data.Args[3]))
+		return h.Exec(notif.PID, pathname)
+
+	case unix.SYS_EXECVEAT:
+		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
+		if err != nil {
+			fmt.Printf("execveat: read string: %s\n", err)
+			return false
+		}
+		return h.Exec(notif.PID, pathname)
 
 	case unix.SYS_OPEN:
 		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
@@ -93,6 +101,14 @@ func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 			return false
 		}
 		return h.Open(notif.PID, pathname, int32(notif.Data.Args[1]), uint32(notif.Data.Args[2]))
+
+	case unix.SYS_OPENAT:
+		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
+		if err != nil {
+			fmt.Printf("openat: read string: %s\n", err)
+			return false
+		}
+		return h.Open(notif.PID, pathname, int32(notif.Data.Args[2]), uint32(notif.Data.Args[3]))
 
 	default:
 		return h.Syscall(notif.PID, notif.Data.NR)

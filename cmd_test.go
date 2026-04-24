@@ -12,8 +12,17 @@ import (
 )
 
 type testHandler struct {
+	exec    func(pid uint32, pathname string) bool
 	open    func(pid uint32, pathname string, flags int32, mode uint32) bool
 	syscall func(pid uint32, nr int32) bool
+}
+
+func (th testHandler) Exec(pid uint32, pathname string) bool {
+	if th.exec != nil {
+		return th.exec(pid, pathname)
+	}
+
+	return true
 }
 
 func (th testHandler) Open(pid uint32, pathname string, flags int32, mode uint32) bool {
@@ -308,6 +317,51 @@ func TestRunOpen(t *testing.T) {
 		t.Errorf("Run() failed with %s", err)
 	} else if ret == 0 {
 		t.Errorf("Run() got %d want not 0", ret)
+	}
+}
+
+func TestRunExec(t *testing.T) {
+	var found bool
+	cmd := Command("/bin/echo", "hello")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string) bool {
+			if pathname == "/bin/echo" {
+				found = true
+			}
+
+			return true
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret != 0 {
+		t.Errorf("Run() got %d want 0", ret)
+	} else if !found {
+		t.Errorf("Run() /bin/echo not handled")
+	}
+
+	cmd = Command("/bin/echo", "hello")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string) bool {
+			if pathname == "/bin/echo" {
+				return false
+			}
+
+			return true
+		},
+	}
+
+	ret, err = exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret == 0 {
+		t.Errorf("Run() got 0 want !0")
 	}
 }
 

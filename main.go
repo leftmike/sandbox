@@ -8,6 +8,11 @@ import (
 
 type syscallHandler struct{}
 
+func (_ syscallHandler) Exec(pid uint32, pathname string) bool {
+	fmt.Printf("%d: execve(%s)\n", pid, pathname)
+	return true
+}
+
 func (_ syscallHandler) Open(pid uint32, pathname string, flags int32, mode uint32) bool {
 	fmt.Printf("%d: openat(%s, %x, %x)\n", pid, pathname, flags, mode)
 	return true
