@@ -14,13 +14,6 @@ import (
 	"github.com/leftmike/sandbox/seccomp"
 )
 
-type SysCallHandler func(fd int, notif *seccomp.Notif) bool
-
-type Handler interface {
-	Open(pid uint32, filename string, flags int32, mode uint32) bool
-	Syscall(pid uint32, nr int32) bool
-}
-
 func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, h Handler) (int,
 	error) {
 

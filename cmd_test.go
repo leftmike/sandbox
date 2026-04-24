@@ -23,16 +23,23 @@ func TestCommandContext(t *testing.T) {
 }
 
 func TestCmdRun(t *testing.T) {
-	if err := Command("/bin/true").Run(); err != nil {
+	cmd := Command("/bin/true")
+	cmd.Handler = testHandler{}
+	if err := cmd.Run(); err != nil {
 		t.Errorf("Run(/bin/true) = %v, want nil", err)
 	}
-	if err := Command("/bin/false").Run(); err == nil {
+
+	cmd = Command("/bin/false")
+	cmd.Handler = testHandler{}
+	if err := cmd.Run(); err == nil {
 		t.Error("Run(/bin/false) = nil, want error")
 	}
 }
 
 func TestCmdOutput(t *testing.T) {
-	out, err := Command("/bin/echo", "hello").Output()
+	cmd := Command("/bin/echo", "hello")
+	cmd.Handler = testHandler{}
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("Output() error: %v", err)
 	}
@@ -51,7 +58,9 @@ func TestCmdOutputStdoutAlreadySet(t *testing.T) {
 }
 
 func TestCmdCombinedOutput(t *testing.T) {
-	out, err := Command("/bin/echo", "hello").CombinedOutput()
+	cmd := Command("/bin/echo", "hello")
+	cmd.Handler = testHandler{}
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CombinedOutput() error: %v", err)
 	}
@@ -95,6 +104,7 @@ func TestCmdEnviron(t *testing.T) {
 
 func TestCmdEnvironPassthrough(t *testing.T) {
 	cmd := Command("/bin/sh", "-c", "/usr/bin/echo $FOO")
+	cmd.Handler = testHandler{}
 	cmd.Env = []string{"FOO=hello"}
 	out, err := cmd.Output()
 	if err != nil {
@@ -114,6 +124,7 @@ func TestCmdString(t *testing.T) {
 
 func TestCmdStdoutPipe(t *testing.T) {
 	cmd := Command("/usr/bin/echo", "hello")
+	cmd.Handler = testHandler{}
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatalf("StdoutPipe() error: %v", err)
@@ -135,6 +146,7 @@ func TestCmdStdoutPipe(t *testing.T) {
 
 func TestCmdStderrPipe(t *testing.T) {
 	cmd := Command("/bin/sh", "-c", "/usr/bin/echo error >&2")
+	cmd.Handler = testHandler{}
 	pipe, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatalf("StderrPipe() error: %v", err)
@@ -156,6 +168,7 @@ func TestCmdStderrPipe(t *testing.T) {
 
 func TestCmdStdinPipe(t *testing.T) {
 	cmd := Command("/bin/cat")
+	cmd.Handler = testHandler{}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("StdinPipe() error: %v", err)
