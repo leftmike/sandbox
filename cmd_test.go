@@ -44,7 +44,7 @@ func (th testHandler) Syscall(pid uint32, nr int32) bool {
 func TestCommand(t *testing.T) {
 	cmd := Command("/bin/echo", "hello")
 	if cmd.Path != "/bin/echo" {
-		t.Errorf("got path %q want /bin/echo", cmd.Path)
+		t.Errorf("got path %s want /bin/echo", cmd.Path)
 	}
 }
 
@@ -52,7 +52,7 @@ func TestCommandContext(t *testing.T) {
 	ctx := context.Background()
 	cmd := CommandContext(ctx, "/bin/echo", "hello")
 	if cmd.Path != "/bin/echo" {
-		t.Errorf("got path %q want /bin/echo", cmd.Path)
+		t.Errorf("got path %s want /bin/echo", cmd.Path)
 	}
 }
 
@@ -78,7 +78,7 @@ func TestCmdOutput(t *testing.T) {
 		t.Fatalf("Output() error: %v", err)
 	}
 	if !strings.Contains(string(out), "hello") {
-		t.Errorf("Output() = %q, want to contain 'hello'", out)
+		t.Errorf("Output() = %s, want to contain 'hello'", out)
 	}
 }
 
@@ -99,7 +99,7 @@ func TestCmdCombinedOutput(t *testing.T) {
 		t.Fatalf("CombinedOutput() error: %v", err)
 	}
 	if !strings.Contains(string(out), "hello") {
-		t.Errorf("CombinedOutput() = %q, want to contain 'hello'", out)
+		t.Errorf("CombinedOutput() = %s, want to contain 'hello'", out)
 	}
 }
 
@@ -131,7 +131,7 @@ func TestCmdEnviron(t *testing.T) {
 	want := map[string]bool{"FOO=bar": true, "BAZ=qux": true}
 	for _, e := range env {
 		if !want[e] {
-			t.Errorf("Environ() returned unexpected entry %q", e)
+			t.Errorf("Environ() returned unexpected entry %s", e)
 		}
 	}
 }
@@ -145,14 +145,14 @@ func TestCmdEnvironPassthrough(t *testing.T) {
 		t.Fatalf("Output() error: %v", err)
 	}
 	if got := strings.TrimSpace(string(out)); got != "hello" {
-		t.Errorf("env passthrough: got %q, want %q", got, "hello")
+		t.Errorf("env passthrough: got %s, want hello", got)
 	}
 }
 
 func TestCmdString(t *testing.T) {
 	cmd := Command("/usr/bin/echo", "hello", "world")
 	if got, want := cmd.String(), "/usr/bin/echo hello world"; got != want {
-		t.Errorf("String() = %q, want %q", got, want)
+		t.Errorf("String() = %s, want %s", got, want)
 	}
 }
 
@@ -174,7 +174,7 @@ func TestCmdStdoutPipe(t *testing.T) {
 		t.Fatalf("Wait() error: %v", err)
 	}
 	if got := strings.TrimSpace(string(out)); got != "hello" {
-		t.Errorf("StdoutPipe: got %q, want %q", got, "hello")
+		t.Errorf("StdoutPipe: got %s, want hello", got)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestCmdStderrPipe(t *testing.T) {
 		t.Fatalf("Wait() error: %v", err)
 	}
 	if got := strings.TrimSpace(string(out)); got != "error" {
-		t.Errorf("StderrPipe: got %q, want %q", got, "error")
+		t.Errorf("StderrPipe: got %s, want error", got)
 	}
 }
 
@@ -226,7 +226,7 @@ func TestCmdStdinPipe(t *testing.T) {
 		t.Fatalf("Wait() error: %v", err)
 	}
 	if string(out) != "hello" {
-		t.Errorf("StdinPipe: got %q, want %q", string(out), "hello")
+		t.Errorf("StdinPipe: got %s, want hello", string(out))
 	}
 }
 
@@ -322,8 +322,9 @@ func TestRunOpen(t *testing.T) {
 
 func TestRunExec(t *testing.T) {
 	var found bool
+	var buf bytes.Buffer
 	cmd := Command("/bin/echo", "hello")
-	cmd.Stdout = io.Discard
+	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string) bool {
@@ -342,10 +343,13 @@ func TestRunExec(t *testing.T) {
 		t.Errorf("Run() got %d want 0", ret)
 	} else if !found {
 		t.Errorf("Run() /bin/echo not handled")
+	} else if got := buf.String(); got != "hello\n" {
+		t.Errorf("Run() stdio got %s want hello", got)
 	}
 
+	buf.Reset()
 	cmd = Command("/bin/echo", "hello")
-	cmd.Stdout = io.Discard
+	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string) bool {
@@ -362,6 +366,8 @@ func TestRunExec(t *testing.T) {
 		t.Errorf("Run() failed with %s", err)
 	} else if ret == 0 {
 		t.Errorf("Run() got 0 want !0")
+	} else if got := buf.String(); got != "" {
+		t.Errorf("Run() stdout got %s want \"\"", got)
 	}
 }
 
