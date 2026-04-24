@@ -87,28 +87,32 @@ func (cmd *Cmd) Run() error {
 	return cmd.Wait()
 }
 
-func (cmd *Cmd) Start() error {
+func (cmd *Cmd) Start() (err error) {
 	if cmd.Handler == nil {
 		panic("sandbox: no handler")
 	}
 
 	var pipe [2]int
-	err := unix.Pipe2(pipe[:], unix.O_CLOEXEC)
+	err = unix.Pipe2(pipe[:], unix.O_CLOEXEC)
 	if err != nil {
 		return err
 	}
-	//defer unix.Close(pipe[0])
-	//defer unix.Close(pipe[1])
+	defer func() {
+		if err != nil {
+			unix.Close(pipe[0])
+			unix.Close(pipe[1])
+		}
+	}()
 
 	sp, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
 	if err != nil {
-		// XXX close: pipe[0], pipe[1]
 		return err
 	}
 
 	pf := os.NewFile(uintptr(sp[0]), "sandbox")
-	//defer pf.Close()
 	cf := os.NewFile(uintptr(sp[1]), "child")
+	defer pf.Close()
+	defer cf.Close()
 
 	cmd.Path = "child/child"
 	cmd.Args = append([]string{"child/child"}, cmd.Args...)
@@ -116,10 +120,7 @@ func (cmd *Cmd) Start() error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	err = cmd.Cmd.Start()
-	cf.Close()
 	if err != nil {
-		// XXX: close: pf, pipe[0], pipe[1]
-
 		// XXX: check the error code and return code from the child
 		// XXX: informative error message if Seccomp filter already set (on WSL2)
 		return err
@@ -128,7 +129,6 @@ func (cmd *Cmd) Start() error {
 	fd, err := recvFd(pf)
 	pf.Close()
 	if err != nil {
-		// XXX: close: pipe[0], pipe[1]
 		cmd.Process.Kill()
 		cmd.Wait()
 		return err
