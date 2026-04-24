@@ -3,33 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/leftmike/sandbox/seccomp"
 )
-
-func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, h Handler) (int,
-	error) {
-
-	cmd := Command(cmdArgs[0], cmdArgs[1:]...)
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	cmd.Handler = h
-
-	err := cmd.Run()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode(), nil
-		}
-		return 0, err
-	}
-	return 0, nil
-}
 
 func recvmsg(f *os.File, buf []byte) ([]byte, error) {
 	sc, err := f.SyscallConn()

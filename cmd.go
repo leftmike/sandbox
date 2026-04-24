@@ -114,6 +114,7 @@ func (cmd *Cmd) Start() (err error) {
 	defer pf.Close()
 	defer cf.Close()
 
+	cmd.Args[0] = cmd.Path
 	cmd.Path = "child/child"
 	cmd.Args = append([]string{"child/child"}, cmd.Args...)
 	cmd.ExtraFiles = []*os.File{cf}

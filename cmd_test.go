@@ -1,11 +1,36 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 )
+
+type testHandler struct {
+	open    func(pid uint32, pathname string, flags int32, mode uint32) bool
+	syscall func(pid uint32, nr int32) bool
+}
+
+func (th testHandler) Open(pid uint32, pathname string, flags int32, mode uint32) bool {
+	if th.open != nil {
+		return th.open(pid, pathname, flags, mode)
+	}
+
+	return true
+}
+
+func (th testHandler) Syscall(pid uint32, nr int32) bool {
+	if th.syscall != nil {
+		return th.syscall(pid, nr)
+	}
+
+	return true
+}
 
 func TestCommand(t *testing.T) {
 	cmd := Command("/bin/echo", "hello")
@@ -194,4 +219,106 @@ func TestCmdStdinPipe(t *testing.T) {
 	if string(out) != "hello" {
 		t.Errorf("StdinPipe: got %q, want %q", string(out), "hello")
 	}
+}
+
+func exitCode(err error) (int, error) {
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode(), nil
+		}
+		return 0, err
+	}
+	return 0, nil
+}
+
+func TestRun(t *testing.T) {
+	cases := []struct {
+		cmd string
+		ret int
+	}{
+		{"/bin/true", 0},
+		{"/bin/false", 1},
+	}
+
+	for _, c := range cases {
+		cmd := Command(c.cmd)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		cmd.Handler = testHandler{}
+
+		ret, err := exitCode(cmd.Run())
+		if err != nil {
+			t.Errorf("Run(%s) failed with %s", c.cmd, err)
+		} else if ret != c.ret {
+			t.Errorf("Run(%s) got %d want %d", c.cmd, ret, c.ret)
+		}
+	}
+}
+
+func TestRunOpen(t *testing.T) {
+	f, err := os.CreateTemp("", "sandbox-open")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("hello sandbox\n")
+	f.Close()
+	defer os.Remove(f.Name())
+
+	var found bool
+	var buf bytes.Buffer
+	cmd := Command("/bin/cat", f.Name())
+	cmd.Stdout = &buf
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+			if pathname == f.Name() {
+				found = true
+			}
+
+			return true
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret != 0 {
+		t.Errorf("Run() got %d want 0", ret)
+	} else if !strings.Contains(buf.String(), "hello sandbox") {
+		t.Errorf("Run() missing output: %s", buf.String())
+	} else if !found {
+		t.Errorf("Run() %s not handled", f.Name())
+	}
+
+	cmd = Command("/bin/cat", f.Name())
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+			if pathname == f.Name() {
+				return false
+			}
+
+			return true
+		},
+	}
+
+	ret, err = exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret == 0 {
+		t.Errorf("Run() got %d want not 0", ret)
+	}
+}
+
+func TestMain(m *testing.M) {
+	cmd := exec.Command("go", "build", "-o", "child/child", "./child/")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build child binary: %s\n", err)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
 }

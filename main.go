@@ -24,6 +24,9 @@ func main() {
 	}
 
 	fmt.Println(os.Args[1:])
-	ret, err := Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, syscallHandler{})
-	fmt.Printf("%s: %d, %s\n", os.Args[1], ret, err)
+	cmd := Command(os.Args[1], os.Args[2:]...)
+	cmd.Handler = syscallHandler{}
+
+	err := cmd.Run()
+	fmt.Printf("%s: %s\n", os.Args[1], err)
 }
