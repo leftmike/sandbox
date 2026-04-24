@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"syscall"
-	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -17,68 +15,13 @@ import (
 func Run(cmdArgs []string, stdin io.Reader, stdout, stderr io.Writer, h Handler) (int,
 	error) {
 
-	pipe := []int{-1, -1}
-	err := unix.Pipe2(pipe, unix.O_CLOEXEC)
-	if err != nil {
-		return 0, err
-	}
-	defer unix.Close(pipe[0])
-	defer unix.Close(pipe[1])
-
-	sp, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
-	if err != nil {
-		return 0, err
-	}
-
-	pf := os.NewFile(uintptr(sp[0]), "sandbox")
-	defer pf.Close()
-
-	cf := os.NewFile(uintptr(sp[1]), "child")
-
-	cmd := exec.Command("child/child")
-	cmd.Args = append([]string{"child/child"}, cmdArgs...)
+	cmd := Command(cmdArgs[0], cmdArgs[1:]...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.ExtraFiles = []*os.File{cf}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Handler = h
 
-	err = cmd.Start()
-	cf.Close()
-	if err != nil {
-		// XXX: check the error code and return code from the child
-		// XXX: informative error message if Seccomp filter already set (on WSL2)
-		return 0, err
-	}
-
-	fd, err := recvFd(pf)
-	if err != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
-		return 0, err
-	}
-	defer unix.Close(fd)
-
-	ch := make(chan error, 2)
-	go func() {
-		err := listen(fd, pipe[0], h)
-		if err != nil {
-			ch <- err
-		}
-	}()
-
-	go func() {
-		ch <- cmd.Wait()
-	}()
-
-	err = <-ch
-
-	syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-	go func() {
-		time.Sleep(time.Second)
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	}()
-
+	err := cmd.Run()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode(), nil
