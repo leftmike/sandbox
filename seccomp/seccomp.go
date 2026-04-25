@@ -146,6 +146,31 @@ func ReadString(fd int, notif *Notif, addr, size uintptr) (string, error) {
 	return "", errors.New("string not NUL terminated")
 }
 
+// NotifAddFd mirrors the kernel's struct seccomp_notif_addfd.
+type NotifAddFd struct {
+	ID         uint64
+	Flags      uint32
+	SrcFd      uint32
+	NewFd      uint32
+	NewFdFlags uint32
+}
+
+func IoctlNotifAddFd(notifFd int, addfd *NotifAddFd) (int, error) {
+	ret, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(notifFd), unix.SECCOMP_IOCTL_NOTIF_ADDFD,
+		uintptr(unsafe.Pointer(addfd)))
+	if errno != 0 {
+		return 0, errno
+	}
+	return int(ret), nil
+}
+
+func WriteMemory(notif *Notif, addr uintptr, data []byte) error {
+	local := []unix.Iovec{{Base: &data[0], Len: uint64(len(data))}}
+	remote := []unix.RemoteIovec{{Base: addr, Len: len(data)}}
+	_, err := unix.ProcessVMWritev(int(notif.PID), local, remote, 0)
+	return err
+}
+
 func IoctlNotifSend(fd int, rsp NotifResp) error {
 	buf := make([]byte, notifRespSize)
 	*(*NotifResp)(unsafe.Pointer(&buf[0])) = rsp
