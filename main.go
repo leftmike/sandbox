@@ -18,6 +18,11 @@ func (_ syscallHandler) Open(pid uint32, pathname string, flags int32, mode uint
 	return true
 }
 
+func (_ syscallHandler) Clone(pid uint32, flags uint64) bool {
+	fmt.Printf("%d: clone(%x)\n", pid, flags)
+	return true
+}
+
 func (_ syscallHandler) Syscall(pid uint32, nr int32) bool {
 	fmt.Printf("%d: syscall: %d\n", pid, nr)
 	return true

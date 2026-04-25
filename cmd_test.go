@@ -14,6 +14,7 @@ import (
 type testHandler struct {
 	exec    func(pid uint32, pathname string) bool
 	open    func(pid uint32, pathname string, flags int32, mode uint32) bool
+	clone   func(pid uint32, flags uint64) bool
 	syscall func(pid uint32, nr int32) bool
 }
 
@@ -28,6 +29,14 @@ func (th testHandler) Exec(pid uint32, pathname string) bool {
 func (th testHandler) Open(pid uint32, pathname string, flags int32, mode uint32) bool {
 	if th.open != nil {
 		return th.open(pid, pathname, flags, mode)
+	}
+
+	return true
+}
+
+func (th testHandler) Clone(pid uint32, flags uint64) bool {
+	if th.clone != nil {
+		return th.clone(pid, flags)
 	}
 
 	return true
@@ -368,6 +377,44 @@ func TestRunExec(t *testing.T) {
 		t.Errorf("Run() got 0 want !0")
 	} else if got := buf.String(); got != "" {
 		t.Errorf("Run() stdout got %s want \"\"", got)
+	}
+}
+
+func TestRunClone(t *testing.T) {
+	var cloned bool
+	cmd := Command("/bin/sh", "-c", "/bin/true")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		clone: func(pid uint32, flags uint64) bool {
+			cloned = true
+			return true
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret != 0 {
+		t.Errorf("Run() got %d want 0", ret)
+	} else if !cloned {
+		t.Error("Run() clone not handled")
+	}
+
+	cmd = Command("/bin/sh", "-c", "/bin/true")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		clone: func(pid uint32, flags uint64) bool {
+			return false
+		},
+	}
+
+	ret, err = exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret == 0 {
+		t.Errorf("Run() got 0 want !0")
 	}
 }
 

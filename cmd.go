@@ -15,6 +15,7 @@ import (
 type Handler interface {
 	Exec(pid uint32, pathname string) bool // XXX: argv, env
 	Open(pid uint32, filename string, flags int32, mode uint32) bool
+	Clone(pid uint32, flags uint64) bool
 	Syscall(pid uint32, nr int32) bool
 }
 
