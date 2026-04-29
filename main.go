@@ -8,6 +8,11 @@ import (
 
 type syscallHandler struct{}
 
+func (_ syscallHandler) Clone(pid uint32, flags uint64) bool {
+	fmt.Printf("%d: clone(%x)\n", pid, flags)
+	return true
+}
+
 func (_ syscallHandler) Exec(pid uint32, pathname string) bool {
 	fmt.Printf("%d: execve(%s)\n", pid, pathname)
 	return true

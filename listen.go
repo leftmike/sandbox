@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -61,6 +62,21 @@ func listen(fd int, cancelFd int, h Handler) error {
 
 func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 	switch notif.Data.NR {
+	case unix.SYS_CLONE:
+		return h.Clone(notif.PID, notif.Data.Args[0])
+
+	case unix.SYS_CLONE3:
+		n := notif.Data.Args[1]
+		if n > 512 {
+			n = 512
+		}
+		buf, err := seccomp.ReadMemory(fd, notif, uintptr(notif.Data.Args[0]), uintptr(n))
+		if err != nil || len(buf) < 8 {
+			fmt.Printf("clone3: read flags: %s\n", err)
+			return false
+		}
+		return h.Clone(notif.PID, binary.LittleEndian.Uint64(buf))
+
 	case unix.SYS_EXECVE:
 		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
 		if err != nil {
@@ -76,6 +92,9 @@ func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 			return false
 		}
 		return h.Exec(notif.PID, pathname)
+
+	case unix.SYS_FORK, unix.SYS_VFORK:
+		return h.Clone(notif.PID, 0)
 
 	case unix.SYS_OPEN:
 		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
