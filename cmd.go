@@ -109,10 +109,9 @@ func (cmd *Cmd) Start() (err error) {
 	if err != nil {
 		return err
 	}
+	defer unix.Close(sp[0])
 
-	pf := os.NewFile(uintptr(sp[0]), "sandbox")
 	cf := os.NewFile(uintptr(sp[1]), "child")
-	defer pf.Close()
 	defer cf.Close()
 
 	cmd.Args[0] = cmd.Path
@@ -128,8 +127,7 @@ func (cmd *Cmd) Start() (err error) {
 		return err
 	}
 
-	fd, err := recvFd(pf)
-	pf.Close()
+	fd, err := recvFd(sp[0])
 	if err != nil {
 		cmd.Process.Kill()
 		cmd.Wait()

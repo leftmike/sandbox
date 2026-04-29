@@ -96,7 +96,7 @@ func init() {
 	fd := installListener()
 	defer unix.Close(fd)
 
-	err = unix.Sendmsg(childSocketFd, []byte{0}, unix.UnixRights(fd), nil, 0)
+	err = unix.Sendmsg(childSocketFd, nil, unix.UnixRights(fd), nil, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: sendmsg: %s\n", err)
 		os.Exit(childSendmsgFailed)

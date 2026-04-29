@@ -11,36 +11,18 @@ import (
 	"github.com/leftmike/sandbox/seccomp"
 )
 
-func recvmsg(f *os.File, buf []byte) ([]byte, error) {
-	sc, err := f.SyscallConn()
-	if err != nil {
-		return nil, err
-	}
-
-	var n int
-	var rerr error
-	err = sc.Read(func(fd uintptr) bool {
-		_, n, _, _, rerr = unix.Recvmsg(int(fd), make([]byte, 1), buf, 0)
-		return rerr != unix.EAGAIN && rerr != unix.EWOULDBLOCK
-	})
-	if err != nil {
-		return nil, err
-	} else if rerr != nil {
-		return nil, rerr
-	}
-
-	return buf[:n], nil
-}
-
-func recvFd(f *os.File) (int, error) {
-	buf, err := recvmsg(f, make([]byte, unix.CmsgSpace(4)))
+func recvFd(fd int) (int, error) {
+	buf := make([]byte, unix.CmsgSpace(4))
+	_, n, _, _, err := unix.Recvmsg(fd, nil, buf, 0)
 	if err != nil {
 		return -1, err
 	}
-	msgs, err := unix.ParseSocketControlMessage(buf)
+
+	msgs, err := unix.ParseSocketControlMessage(buf[:n])
 	if err != nil {
 		return -1, err
 	}
+
 	for _, msg := range msgs {
 		if msg.Header.Level == unix.SOL_SOCKET && msg.Header.Type == unix.SCM_RIGHTS {
 			fds, err := unix.ParseUnixRights(&msg)
