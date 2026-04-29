@@ -1,5 +1,3 @@
-//go:build linux && amd64
-
 package main
 
 import (
@@ -9,8 +7,17 @@ import (
 	"unsafe"
 
 	"golang.org/x/sys/unix"
+)
 
-	"github.com/leftmike/sandbox/shared"
+const (
+	childSocketFd = 3
+
+	// Failure error codes from the sandbox child.
+	childBadArguments      = 189
+	childNoNewPrivsFailed  = 190
+	childNewListenerFailed = 191
+	childSendmsgFailed     = 192
+	childExecCommandFailed = 193
 )
 
 func installListener() int {
@@ -41,7 +48,7 @@ func installListener() int {
 		unix.SECCOMP_FILTER_FLAG_NEW_LISTENER, uintptr(unsafe.Pointer(&fprog)))
 	if errno != 0 {
 		fmt.Fprintf(os.Stderr, "seccomp(SET_MODE_FILTER, NEW_LISTENER): %d", errno)
-		os.Exit(shared.NewListenerFailed)
+		os.Exit(childNewListenerFailed)
 	}
 
 	return int(fd)
@@ -62,38 +69,42 @@ func isSocketFd(fd int) bool {
 	return ok
 }
 
-func main() {
+func init() {
+	if os.Args[0] != "__sandbox_child" {
+		return
+	}
+
 	runtime.LockOSThread()
 
-	if !isSocketFd(shared.SocketFd) {
-		fmt.Fprintf(os.Stderr, "sandbox child: not a socket: fd %d\n", shared.SocketFd)
-		os.Exit(shared.BadArguments)
+	if !isSocketFd(childSocketFd) {
+		fmt.Fprintf(os.Stderr, "sandbox child: not a socket: fd %d\n", childSocketFd)
+		os.Exit(childBadArguments)
 	}
-	defer unix.Close(shared.SocketFd)
+	defer unix.Close(childSocketFd)
 
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "sandbox child: missing command to sandbox")
-		os.Exit(shared.BadArguments)
+		os.Exit(childBadArguments)
 	}
 
 	err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
-		os.Exit(shared.NoNewPrivsFailed)
+		os.Exit(childNoNewPrivsFailed)
 	}
 
 	fd := installListener()
 	defer unix.Close(fd)
 
-	err = unix.Sendmsg(shared.SocketFd, []byte{0}, unix.UnixRights(fd), nil, 0)
+	err = unix.Sendmsg(childSocketFd, []byte{0}, unix.UnixRights(fd), nil, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: sendmsg: %s\n", err)
-		os.Exit(shared.SendmsgFailed)
+		os.Exit(childSendmsgFailed)
 	}
 
 	err = unix.Exec(os.Args[1], os.Args[1:], os.Environ())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: exec(%v): %s\n", os.Args[1:], err)
-		os.Exit(shared.ExecCommandFailed)
+		os.Exit(childExecCommandFailed)
 	}
 }

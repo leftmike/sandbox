@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -369,16 +368,4 @@ func TestRunExec(t *testing.T) {
 	} else if got := buf.String(); got != "" {
 		t.Errorf("Run() stdout got %s want \"\"", got)
 	}
-}
-
-func TestMain(m *testing.M) {
-	cmd := exec.Command("go", "build", "-o", "child/child", "./child/")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to build child binary: %s\n", err)
-		os.Exit(1)
-	}
-	os.Exit(m.Run())
 }

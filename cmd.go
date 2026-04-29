@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -116,14 +115,9 @@ func (cmd *Cmd) Start() (err error) {
 	defer pf.Close()
 	defer cf.Close()
 
-	childPath, err := filepath.Abs("child/child")
-	if err != nil {
-		return err
-	}
-
 	cmd.Args[0] = cmd.Path
-	cmd.Path = childPath
-	cmd.Args = append([]string{childPath}, cmd.Args...)
+	cmd.Path = "/proc/self/exe" // XXX: os.Executable()?
+	cmd.Args = append([]string{"__sandbox_child"}, cmd.Args...)
 	cmd.ExtraFiles = []*os.File{cf}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
