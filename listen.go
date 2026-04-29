@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"golang.org/x/sys/unix"
 
@@ -100,6 +101,14 @@ func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 			fmt.Printf("open: read string: %s\n", err)
 			return false
 		}
+		if !filepath.IsAbs(pathname) {
+			cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", notif.PID))
+			if err != nil {
+				fmt.Printf("open: resolve cwd: %s\n", err)
+				return false
+			}
+			pathname = filepath.Join(cwd, pathname)
+		}
 		return h.Open(notif.PID, pathname, int32(notif.Data.Args[1]), uint32(notif.Data.Args[2]))
 
 	case unix.SYS_OPENAT:
@@ -107,6 +116,20 @@ func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 		if err != nil {
 			fmt.Printf("openat: read string: %s\n", err)
 			return false
+		}
+		if !filepath.IsAbs(pathname) {
+			dirfd := int32(notif.Data.Args[0])
+			var dirPath string
+			if dirfd == unix.AT_FDCWD {
+				dirPath, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", notif.PID))
+			} else {
+				dirPath, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", notif.PID, dirfd))
+			}
+			if err != nil {
+				fmt.Printf("openat: resolve dirfd: %s\n", err)
+				return false
+			}
+			pathname = filepath.Join(dirPath, pathname)
 		}
 		return h.Open(notif.PID, pathname, int32(notif.Data.Args[2]), uint32(notif.Data.Args[3]))
 
