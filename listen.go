@@ -80,18 +80,38 @@ func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 	case unix.SYS_EXECVE:
 		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
 		if err != nil {
-			fmt.Printf("execve: read string: %s\n", err)
+			fmt.Printf("execve: read pathname: %s\n", err)
 			return false
 		}
-		return h.Exec(notif.PID, pathname)
+		argv, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[1]), 4096)
+		if err != nil {
+			fmt.Printf("execve: read argv: %s\n", err)
+			return false
+		}
+		env, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[2]), 4096)
+		if err != nil {
+			fmt.Printf("execve: read env: %s\n", err)
+			return false
+		}
+		return h.Exec(notif.PID, pathname, argv, env)
 
 	case unix.SYS_EXECVEAT:
 		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
 		if err != nil {
-			fmt.Printf("execveat: read string: %s\n", err)
+			fmt.Printf("execveat: read pathname: %s\n", err)
 			return false
 		}
-		return h.Exec(notif.PID, pathname)
+		argv, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[2]), 4096)
+		if err != nil {
+			fmt.Printf("execveat: read argv: %s\n", err)
+			return false
+		}
+		env, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[3]), 4096)
+		if err != nil {
+			fmt.Printf("execveat: read env: %s\n", err)
+			return false
+		}
+		return h.Exec(notif.PID, pathname, argv, env)
 
 	case unix.SYS_FORK, unix.SYS_VFORK:
 		return h.Clone(notif.PID, 0)

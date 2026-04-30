@@ -12,7 +12,7 @@ import (
 
 type testHandler struct {
 	clone   func(pid uint32, flags uint64) bool
-	exec    func(pid uint32, pathname string) bool
+	exec    func(pid uint32, pathname string, argv []string, env []string) bool
 	open    func(pid uint32, pathname string, flags int32, mode uint32) bool
 	syscall func(pid uint32, nr int32) bool
 }
@@ -25,9 +25,9 @@ func (th testHandler) Clone(pid uint32, flags uint64) bool {
 	return true
 }
 
-func (th testHandler) Exec(pid uint32, pathname string) bool {
+func (th testHandler) Exec(pid uint32, pathname string, argv []string, env []string) bool {
 	if th.exec != nil {
-		return th.exec(pid, pathname)
+		return th.exec(pid, pathname, argv, env)
 	}
 
 	return true
@@ -335,7 +335,7 @@ func TestRunExec(t *testing.T) {
 	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string) bool {
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				found = true
 			}
@@ -360,7 +360,7 @@ func TestRunExec(t *testing.T) {
 	cmd.Stdout = &buf
 	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string) bool {
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				return false
 			}

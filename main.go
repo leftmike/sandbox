@@ -13,8 +13,11 @@ func (_ syscallHandler) Clone(pid uint32, flags uint64) bool {
 	return true
 }
 
-func (_ syscallHandler) Exec(pid uint32, pathname string) bool {
-	fmt.Printf("%d: execve(%s)\n", pid, pathname)
+func (_ syscallHandler) Exec(pid uint32, pathname string, argv []string, env []string) bool {
+	if len(env) > 5 {
+		env = []string{env[0], env[1], "...", env[len(env)-2], env[len(env)-1]}
+	}
+	fmt.Printf("%d: execve(%s, %v, %v)\n", pid, pathname, argv, env)
 	return true
 }
 

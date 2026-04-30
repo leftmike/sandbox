@@ -1,6 +1,7 @@
 package seccomp
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -144,6 +145,35 @@ func ReadString(fd int, notif *Notif, addr, size uintptr) (string, error) {
 	}
 
 	return "", errors.New("string not NUL terminated")
+}
+
+func ReadStringSlice(fd int, notif *Notif, addr, size uintptr) ([]string, error) {
+	if addr == 0 {
+		return nil, nil
+	}
+
+	buf, err := ReadMemory(fd, notif, addr, size)
+	if err != nil {
+		return nil, err
+	}
+
+	ps := unsafe.Sizeof(addr)
+	var ret []string
+	for len(buf) >= int(ps) {
+		p := binary.LittleEndian.Uint64(buf)
+		if p == 0 {
+			break
+		}
+		buf = buf[ps:]
+
+		s, err := ReadString(fd, notif, uintptr(p), size)
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, s)
+	}
+
+	return ret, nil
 }
 
 func IoctlNotifSend(fd int, rsp NotifResp) error {
