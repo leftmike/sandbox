@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -376,6 +377,59 @@ func TestRunExec(t *testing.T) {
 		t.Errorf("Run() got 0 want !0")
 	} else if got := buf.String(); got != "" {
 		t.Errorf("Run() stdout got %s want \"\"", got)
+	}
+}
+
+func TestRunExecArgv(t *testing.T) {
+	want := []string{"/bin/echo", "hello", "world"}
+	cmd := Command(want[0], want[1:]...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+
+	var gotArgv []string
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+			if pathname == "/bin/echo" {
+				gotArgv = argv
+			}
+			return true
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret != 0 {
+		t.Errorf("Run() got %d want 0", ret)
+	} else if !slices.Equal(gotArgv, want) {
+		t.Errorf("argv = %v, want %v", gotArgv, want)
+	}
+}
+
+func TestRunExecEnv(t *testing.T) {
+	wantEnv := []string{"FOO=bar", "BAZ=qux"}
+	cmd := Command("/bin/true")
+	cmd.Env = wantEnv
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+
+	var gotEnv []string
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+			if pathname == "/bin/true" {
+				gotEnv = env
+			}
+			return true
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret != 0 {
+		t.Errorf("Run() got %d want 0", ret)
+	} else if !slices.Equal(gotEnv, wantEnv) {
+		t.Errorf("env = %v, want %v", gotEnv, wantEnv)
 	}
 }
 
