@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 type testHandler struct {
@@ -430,6 +432,41 @@ func TestRunExecEnv(t *testing.T) {
 		t.Errorf("Run() got %d want 0", ret)
 	} else if !slices.Equal(gotEnv, wantEnv) {
 		t.Errorf("env = %v, want %v", gotEnv, wantEnv)
+	}
+}
+
+func TestRunCloneThread(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+
+	const script = `
+import threading
+t = threading.Thread(target=lambda: None)
+t.start()
+t.join()
+`
+	var threadCloned bool
+	cmd := Command(python, "-c", script)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		clone: func(pid uint32, flags uint64) bool {
+			if flags&unix.CLONE_THREAD != 0 {
+				threadCloned = true
+			}
+			return true
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if ret != 0 {
+		t.Errorf("Run() got %d want 0", ret)
+	} else if !threadCloned {
+		t.Error("Run() thread clone not handled")
 	}
 }
 
