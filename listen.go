@@ -120,17 +120,17 @@ func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 		}
 		if !filepath.IsAbs(pathname) {
 			dirfd := int32(notif.Data.Args[0])
-			var dirPath string
+			var dir string
 			if dirfd == unix.AT_FDCWD {
-				dirPath, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", notif.PID))
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", notif.PID))
 			} else {
-				dirPath, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", notif.PID, dirfd))
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", notif.PID, dirfd))
 			}
 			if err != nil {
 				fmt.Printf("openat: resolve dirfd: %s\n", err)
 				return false
 			}
-			pathname = filepath.Join(dirPath, pathname)
+			pathname = filepath.Join(dir, pathname)
 		}
 		return h.Open(notif.PID, pathname, int32(notif.Data.Args[2]), uint32(notif.Data.Args[3]))
 
