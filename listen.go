@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/leftmike/sandbox/seccomp"
 )
 
 func recvFd(fd int) (int, error) {
@@ -39,112 +37,112 @@ func recvFd(fd int) (int, error) {
 
 func listen(fd int, cancelFd int, h Handler) error {
 	for {
-		notif, err := seccomp.IoctlNotifRecv(fd, cancelFd)
-		if err != nil || notif == nil {
+		ntf, err := ioctlNotifRecv(fd, cancelFd)
+		if err != nil || ntf == nil {
 			return err
 		}
 
-		allowed := handler(fd, notif, h)
+		allowed := handler(fd, ntf, h)
 
-		rsp := seccomp.NotifResp{ID: notif.ID}
+		rsp := notifResp{id: ntf.id}
 		if allowed {
-			rsp.Flags = unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			rsp.flags = unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
 		} else {
-			rsp.Error = -int32(unix.EACCES)
+			rsp.errno = -int32(unix.EACCES)
 		}
 
-		err = seccomp.IoctlNotifSend(fd, rsp)
+		err = ioctlNotifSend(fd, rsp)
 		if err != nil {
 			return err
 		}
 	}
 }
 
-func handler(fd int, notif *seccomp.Notif, h Handler) bool {
-	switch notif.Data.NR {
+func handler(fd int, ntf *notif, h Handler) bool {
+	switch ntf.data.nr {
 	case unix.SYS_CLONE:
-		return h.Clone(notif.PID, notif.Data.Args[0])
+		return h.Clone(ntf.pid, ntf.data.args[0])
 
 	case unix.SYS_CLONE3:
-		n := notif.Data.Args[1]
+		n := ntf.data.args[1]
 		if n > 512 {
 			n = 512
 		}
-		buf, err := seccomp.ReadMemory(fd, notif, uintptr(notif.Data.Args[0]), uintptr(n))
+		buf, err := readMemory(fd, ntf, uintptr(ntf.data.args[0]), uintptr(n))
 		if err != nil || len(buf) < 8 {
 			fmt.Printf("clone3: read flags: %s\n", err)
 			return false
 		}
-		return h.Clone(notif.PID, binary.LittleEndian.Uint64(buf))
+		return h.Clone(ntf.pid, binary.LittleEndian.Uint64(buf))
 
 	case unix.SYS_EXECVE:
-		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
+		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
 		if err != nil {
 			fmt.Printf("execve: read pathname: %s\n", err)
 			return false
 		}
-		argv, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[1]), 4096)
+		argv, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[1]), 4096)
 		if err != nil {
 			fmt.Printf("execve: read argv: %s\n", err)
 			return false
 		}
-		env, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[2]), 4096)
+		env, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[2]), 4096)
 		if err != nil {
 			fmt.Printf("execve: read env: %s\n", err)
 			return false
 		}
-		return h.Exec(notif.PID, pathname, argv, env)
+		return h.Exec(ntf.pid, pathname, argv, env)
 
 	case unix.SYS_EXECVEAT:
-		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
+		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
 		if err != nil {
 			fmt.Printf("execveat: read pathname: %s\n", err)
 			return false
 		}
-		argv, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[2]), 4096)
+		argv, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[2]), 4096)
 		if err != nil {
 			fmt.Printf("execveat: read argv: %s\n", err)
 			return false
 		}
-		env, err := seccomp.ReadStringSlice(fd, notif, uintptr(notif.Data.Args[3]), 4096)
+		env, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[3]), 4096)
 		if err != nil {
 			fmt.Printf("execveat: read env: %s\n", err)
 			return false
 		}
-		return h.Exec(notif.PID, pathname, argv, env)
+		return h.Exec(ntf.pid, pathname, argv, env)
 
 	case unix.SYS_FORK, unix.SYS_VFORK:
-		return h.Clone(notif.PID, 0)
+		return h.Clone(ntf.pid, 0)
 
 	case unix.SYS_OPEN:
-		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[0]), 2048)
+		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
 		if err != nil {
 			fmt.Printf("open: read string: %s\n", err)
 			return false
 		}
 		if !filepath.IsAbs(pathname) {
-			cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", notif.PID))
+			cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
 			if err != nil {
 				fmt.Printf("open: resolve cwd: %s\n", err)
 				return false
 			}
 			pathname = filepath.Join(cwd, pathname)
 		}
-		return h.Open(notif.PID, pathname, int32(notif.Data.Args[1]), uint32(notif.Data.Args[2]))
+		return h.Open(ntf.pid, pathname, int32(ntf.data.args[1]), uint32(ntf.data.args[2]))
 
 	case unix.SYS_OPENAT:
-		pathname, err := seccomp.ReadString(fd, notif, uintptr(notif.Data.Args[1]), 2048)
+		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
 		if err != nil {
 			fmt.Printf("openat: read string: %s\n", err)
 			return false
 		}
 		if !filepath.IsAbs(pathname) {
-			dirfd := int32(notif.Data.Args[0])
+			dirfd := int32(ntf.data.args[0])
 			var dir string
 			if dirfd == unix.AT_FDCWD {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", notif.PID))
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
 			} else {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", notif.PID, dirfd))
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
 			}
 			if err != nil {
 				fmt.Printf("openat: resolve dirfd: %s\n", err)
@@ -152,9 +150,9 @@ func handler(fd int, notif *seccomp.Notif, h Handler) bool {
 			}
 			pathname = filepath.Join(dir, pathname)
 		}
-		return h.Open(notif.PID, pathname, int32(notif.Data.Args[2]), uint32(notif.Data.Args[3]))
+		return h.Open(ntf.pid, pathname, int32(ntf.data.args[2]), uint32(ntf.data.args[3]))
 
 	default:
-		return h.Syscall(notif.PID, notif.Data.NR)
+		return h.Syscall(ntf.pid, ntf.data.nr)
 	}
 }

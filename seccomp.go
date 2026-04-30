@@ -1,4 +1,4 @@
-package seccomp
+package main
 
 import (
 	"encoding/binary"
@@ -31,17 +31,17 @@ func init() {
 		panic(fmt.Sprintf("seccomp(GET_NOTIF_SIZES): %d", errno))
 	}
 
-	if uintptr(ns.notif) < unsafe.Sizeof(Notif{}) {
-		panic(fmt.Sprintf("ns.notif < unsafe.Sizeof(Notif{}): %d %d", ns.notif,
-			unsafe.Sizeof(Notif{})))
+	if uintptr(ns.notif) < unsafe.Sizeof(notif{}) {
+		panic(fmt.Sprintf("ns.notif < unsafe.Sizeof(notif{}): %d %d", ns.notif,
+			unsafe.Sizeof(notif{})))
 	}
-	if uintptr(ns.data) < unsafe.Sizeof(Data{}) {
-		panic(fmt.Sprintf("ns.data < unsafe.Sizeof(Data{}): %d %d", ns.data,
-			unsafe.Sizeof(Data{})))
+	if uintptr(ns.data) < unsafe.Sizeof(notifData{}) {
+		panic(fmt.Sprintf("ns.data < unsafe.Sizeof(notifData{}): %d %d", ns.data,
+			unsafe.Sizeof(notifData{})))
 	}
-	if uintptr(ns.notifResp) < unsafe.Sizeof(NotifResp{}) {
-		panic(fmt.Sprintf("ns.notifResp < unsafe.Sizeof(NotifResp{}): %d %d", ns.notifResp,
-			unsafe.Sizeof(NotifResp{})))
+	if uintptr(ns.notifResp) < unsafe.Sizeof(notifResp{}) {
+		panic(fmt.Sprintf("ns.notifResp < unsafe.Sizeof(notifResp{}): %d %d", ns.notifResp,
+			unsafe.Sizeof(notifResp{})))
 	}
 
 	notifSize = int(ns.notif)
@@ -49,28 +49,28 @@ func init() {
 	notifRespSize = int(ns.notifResp)
 }
 
-type Notif struct {
-	ID    uint64
-	PID   uint32
-	Flags uint32
-	Data  Data
+type notif struct {
+	id    uint64
+	pid   uint32
+	flags uint32
+	data  notifData
 }
 
-type Data struct {
-	NR                 int32
-	Arch               uint32
-	InstructionPointer uint64
-	Args               [6]uint64
+type notifData struct {
+	nr                 int32
+	arch               uint32
+	instructionPointer uint64
+	args               [6]uint64
 }
 
-type NotifResp struct {
-	ID    uint64
-	Val   int64
-	Error int32
-	Flags uint32
+type notifResp struct {
+	id    uint64
+	val   int64
+	errno int32
+	flags uint32
 }
 
-func IoctlNotifRecv(fd int, cancelFd int) (*Notif, error) {
+func ioctlNotifRecv(fd int, cancelFd int) (*notif, error) {
 	buf := make([]byte, notifSize)
 	pfds := []unix.PollFd{
 		{Fd: int32(fd), Events: unix.POLLIN},
@@ -100,18 +100,18 @@ func IoctlNotifRecv(fd int, cancelFd int) (*Notif, error) {
 		}
 	}
 
-	return (*Notif)(unsafe.Pointer(&buf[0])), nil
+	return (*notif)(unsafe.Pointer(&buf[0])), nil
 }
 
-func ReadMemory(fd int, notif *Notif, addr, size uintptr) ([]byte, error) {
-	f, err := os.OpenFile(fmt.Sprintf("/proc/%d/mem", notif.PID), os.O_RDONLY, 0)
+func readMemory(fd int, ntf *notif, addr, size uintptr) ([]byte, error) {
+	f, err := os.OpenFile(fmt.Sprintf("/proc/%d/mem", ntf.pid), os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
 	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
-		uintptr(unsafe.Pointer(&notif.ID)))
+		uintptr(unsafe.Pointer(&ntf.id)))
 	if errno != 0 {
 		return nil, errno
 	}
@@ -124,7 +124,7 @@ func ReadMemory(fd int, notif *Notif, addr, size uintptr) ([]byte, error) {
 	buf = buf[:n]
 
 	_, _, errno = unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
-		uintptr(unsafe.Pointer(&notif.ID)))
+		uintptr(unsafe.Pointer(&ntf.id)))
 	if errno != 0 {
 		return nil, errno
 	}
@@ -132,8 +132,8 @@ func ReadMemory(fd int, notif *Notif, addr, size uintptr) ([]byte, error) {
 	return buf, nil
 }
 
-func ReadString(fd int, notif *Notif, addr, size uintptr) (string, error) {
-	buf, err := ReadMemory(fd, notif, addr, size)
+func readString(fd int, ntf *notif, addr, size uintptr) (string, error) {
+	buf, err := readMemory(fd, ntf, addr, size)
 	if err != nil {
 		return "", err
 	}
@@ -147,12 +147,12 @@ func ReadString(fd int, notif *Notif, addr, size uintptr) (string, error) {
 	return "", errors.New("string not NUL terminated")
 }
 
-func ReadStringSlice(fd int, notif *Notif, addr, size uintptr) ([]string, error) {
+func readStringSlice(fd int, ntf *notif, addr, size uintptr) ([]string, error) {
 	if addr == 0 {
 		return nil, nil
 	}
 
-	buf, err := ReadMemory(fd, notif, addr, size)
+	buf, err := readMemory(fd, ntf, addr, size)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func ReadStringSlice(fd int, notif *Notif, addr, size uintptr) ([]string, error)
 		}
 		buf = buf[ps:]
 
-		s, err := ReadString(fd, notif, uintptr(p), size)
+		s, err := readString(fd, ntf, uintptr(p), size)
 		if err != nil {
 			return nil, err
 		}
@@ -176,9 +176,9 @@ func ReadStringSlice(fd int, notif *Notif, addr, size uintptr) ([]string, error)
 	return ret, nil
 }
 
-func IoctlNotifSend(fd int, rsp NotifResp) error {
+func ioctlNotifSend(fd int, rsp notifResp) error {
 	buf := make([]byte, notifRespSize)
-	*(*NotifResp)(unsafe.Pointer(&buf[0])) = rsp
+	*(*notifResp)(unsafe.Pointer(&buf[0])) = rsp
 
 	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_SEND,
 		uintptr(unsafe.Pointer(&buf[0])))
