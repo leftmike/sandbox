@@ -116,8 +116,14 @@ func (cmd *Cmd) Start() (err error) {
 	defer cf.Close()
 
 	cmd.Args[0] = cmd.Path
+	cfg := childConfig{
+		Path: cmd.Path,
+		Args: cmd.Args,
+		Env:  cmd.Env,
+	}
+
 	cmd.Path = "/proc/self/exe" // XXX: os.Executable()?
-	cmd.Args = append([]string{"__sandbox_child"}, cmd.Args...)
+	cmd.Args = []string{"__sandbox_child"}
 	cmd.ExtraFiles = []*os.File{cf}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
@@ -129,6 +135,9 @@ func (cmd *Cmd) Start() (err error) {
 	}
 
 	fd, err := recvFd(sp[0])
+	if err == nil {
+		err = sendConfig(sp[0], &cfg)
+	}
 	if err != nil {
 		cmd.Process.Kill()
 		cmd.Wait()

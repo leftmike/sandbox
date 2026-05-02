@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -17,8 +18,31 @@ const (
 	childNoNewPrivsFailed  = 190
 	childNewListenerFailed = 191
 	childSendmsgFailed     = 192
-	childExecCommandFailed = 193
+	childRecvConfigFailed  = 193
+	childExecCommandFailed = 194
 )
+
+type childConfig struct {
+	Path string
+	Args []string
+	Env  []string
+}
+
+func recvConfig(fd int) (*childConfig, error) {
+	buf := make([]byte, 1024*64)
+	n, _, _, _, err := unix.Recvmsg(fd, buf, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg childConfig
+	err = json.Unmarshal(buf[:n], &cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
 
 func installListener() int {
 	prog := []unix.SockFilter{
@@ -100,10 +124,10 @@ func init() {
 		fmt.Fprintf(os.Stderr, "sandbox child: not a socket: fd %d\n", childSocketFd)
 		os.Exit(childBadArguments)
 	}
-	defer unix.Close(childSocketFd)
+	defer unix.Close(childSocketFd) // XXX: right before Exec?
 
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "sandbox child: missing command to sandbox")
+	if len(os.Args) != 1 {
+		fmt.Fprintln(os.Stderr, "sandbox child: expected no arguments")
 		os.Exit(childBadArguments)
 	}
 
@@ -122,9 +146,15 @@ func init() {
 		os.Exit(childSendmsgFailed)
 	}
 
-	err = unix.Exec(os.Args[1], os.Args[1:], os.Environ())
+	cfg, err := recvConfig(childSocketFd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sandbox child: exec(%v): %s\n", os.Args[1:], err)
+		fmt.Fprintf(os.Stderr, "sandbox child: recv config: %s\n", err)
+		os.Exit(childRecvConfigFailed)
+	}
+
+	err = unix.Exec(cfg.Path, cfg.Args, cfg.Env)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sandbox child: exec(%v): %s\n", cfg.Path, err)
 		os.Exit(childExecCommandFailed)
 	}
 }

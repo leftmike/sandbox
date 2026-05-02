@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -33,6 +34,14 @@ func recvFd(fd int) (int, error) {
 		}
 	}
 	return -1, errors.New("sandbox: no fd from child")
+}
+
+func sendConfig(fd int, cfg *childConfig) error {
+	buf, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	return unix.Sendmsg(fd, buf, nil, nil, 0)
 }
 
 func listen(fd int, cancelFd int, h Handler) error {
