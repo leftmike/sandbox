@@ -114,6 +114,10 @@ func (cmd *Cmd) Start() (err error) {
 
 	cf := os.NewFile(uintptr(sp[1]), "child")
 
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
 		Path: cmd.Path,
