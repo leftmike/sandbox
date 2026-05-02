@@ -118,7 +118,7 @@ func readMemory(fd int, ntf *notif, addr, size uintptr) ([]byte, error) {
 
 	buf := make([]byte, size)
 	n, err := f.ReadAt(buf, int64(addr))
-	if err != nil && !errors.Is(err, io.EOF) && n == 0 {
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, unix.EIO) {
 		return nil, err
 	}
 	buf = buf[:n]
