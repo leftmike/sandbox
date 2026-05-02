@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -65,6 +66,12 @@ func listen(fd int, cancelFd int, h Handler) error {
 			return err
 		}
 	}
+}
+
+type openHow struct {
+	flags   uint64
+	mode    uint64
+	resolve uint64
 }
 
 func handler(fd int, ntf *notif, h Handler) bool {
@@ -160,6 +167,36 @@ func handler(fd int, ntf *notif, h Handler) bool {
 			pathname = filepath.Join(dir, pathname)
 		}
 		return h.Open(ntf.pid, pathname, int32(ntf.data.args[2]), uint32(ntf.data.args[3]))
+
+	case unix.SYS_OPENAT2:
+		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
+		if err != nil {
+			fmt.Printf("openat2: read pathname: %s\n", err)
+			return false
+		}
+		if !filepath.IsAbs(pathname) {
+			dirfd := int32(ntf.data.args[0])
+			var dir string
+			if dirfd == unix.AT_FDCWD {
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
+			} else {
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
+			}
+			if err != nil {
+				fmt.Printf("openat2: resolve dirfd: %s\n", err)
+				return false
+			}
+			pathname = filepath.Join(dir, pathname)
+		}
+
+		var oh openHow
+		buf, err := readMemory(fd, ntf, uintptr(ntf.data.args[2]), unsafe.Sizeof(oh))
+		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
+			fmt.Printf("openat2: read open_memory how: %s\n", err)
+			return false
+		}
+		oh = *(*openHow)(unsafe.Pointer(&buf[0]))
+		return h.Open(ntf.pid, pathname, int32(oh.flags), uint32(oh.mode))
 
 	default:
 		return h.Syscall(ntf.pid, ntf.data.nr)

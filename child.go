@@ -46,7 +46,13 @@ func recvConfig(fd int) (*childConfig, error) {
 
 func installListener() int {
 	prog := []unix.SockFilter{
-		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 0},
+		// Reject anything that isn't x86-64 native; 32-bit compat (int 0x80) uses
+		// different syscall numbers that the rest of the filter never sees.
+		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 4}, // load seccomp_data.arch
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.AUDIT_ARCH_X86_64, Jt: 1, Jf: 0},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_KILL_PROCESS},
+
+		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 0}, // load seccomp_data.nr
 
 		// clone
 		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_CLONE, Jt: 0, Jf: 1},
@@ -75,6 +81,16 @@ func installListener() int {
 		// openat
 		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_OPENAT, Jt: 0, Jf: 1},
 		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+
+		// openat2
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_OPENAT2, Jt: 0, Jf: 1},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+
+		// open_by_handle_at
+		// No pathname is available from the file handle; deny unconditionally.
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_OPEN_BY_HANDLE_AT, Jt: 0,
+			Jf: 1},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_KILL_PROCESS},
 
 		// vfork
 		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_VFORK, Jt: 0, Jf: 1},
@@ -138,7 +154,7 @@ func init() {
 	}
 
 	fd := installListener()
-	defer unix.Close(fd)
+	unix.CloseOnExec(fd)
 
 	err = unix.Sendmsg(childSocketFd, nil, unix.UnixRights(fd), nil, 0)
 	if err != nil {
