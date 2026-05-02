@@ -113,7 +113,6 @@ func (cmd *Cmd) Start() (err error) {
 	defer unix.Close(sp[0])
 
 	cf := os.NewFile(uintptr(sp[1]), "child")
-	defer cf.Close()
 
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
@@ -128,20 +127,19 @@ func (cmd *Cmd) Start() (err error) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	err = cmd.Cmd.Start()
+	cf.Close()
 	if err != nil {
-		// XXX: check the error code and return code from the child
-		// XXX: informative error message if Seccomp filter already set (on WSL2)
 		return err
 	}
 
 	fd, err := recvFd(sp[0])
-	if err == nil {
-		err = sendConfig(sp[0], &cfg)
-	}
 	if err != nil {
-		cmd.Process.Kill()
-		cmd.Wait()
-		return err
+		return cmd.childFailed(err)
+	}
+
+	err = sendConfig(sp[0], &cfg)
+	if err != nil {
+		return cmd.childFailed(err)
 	}
 
 	cmd.waitCh = make(chan error, 2)
@@ -161,6 +159,31 @@ func (cmd *Cmd) Start() (err error) {
 
 	cmd.closeFd = pipe[1]
 	return nil
+}
+
+func (cmd *Cmd) childFailed(err error) error {
+	cmd.Process.Kill()
+	cmd.Cmd.Wait()
+
+	if cmd.ProcessState != nil {
+		switch cmd.ProcessState.ExitCode() {
+		case childBadArguments:
+			return errors.New("child: bad arguments")
+		case childNoNewPrivsFailed:
+			return errors.New("child: setting no new privileges failed")
+		case childNewListenerFailed:
+			return errors.New("child: new seccomp filter failed; likely because there is an " +
+				"existing filter")
+		case childSendmsgFailed:
+			return errors.New("child: sending listener fd to sandbox failed")
+		case childRecvConfigFailed:
+			return errors.New("child: receiving config from sandbox failed")
+		case childExecCommandFailed:
+			return errors.New("child: executing command failed")
+		}
+	}
+
+	return err
 }
 
 func (cmd *Cmd) Wait() error {

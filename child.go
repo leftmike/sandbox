@@ -124,6 +124,7 @@ func init() {
 		fmt.Fprintf(os.Stderr, "sandbox child: not a socket: fd %d\n", childSocketFd)
 		os.Exit(childBadArguments)
 	}
+	unix.CloseOnExec(childSocketFd)
 
 	if len(os.Args) != 1 {
 		fmt.Fprintln(os.Stderr, "sandbox child: expected no arguments")
@@ -151,7 +152,6 @@ func init() {
 		os.Exit(childRecvConfigFailed)
 	}
 
-	unix.Close(childSocketFd)
 	err = unix.Exec(cfg.Path, cfg.Args, cfg.Env)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: exec(%v): %s\n", cfg.Path, err)
