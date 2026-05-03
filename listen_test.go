@@ -20,7 +20,7 @@ func TestOpenatAbsolute(t *testing.T) {
 	var found bool
 	cmd := Command("/bin/cat", want)
 	cmd.Handler = testHandler{
-		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
 			if pathname == want {
 				found = true
 			}
@@ -49,7 +49,7 @@ func TestOpenatATFDCWD(t *testing.T) {
 	cmd := Command("/bin/cat", name)
 	cmd.Dir = dir
 	cmd.Handler = testHandler{
-		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
 			if pathname == want {
 				found = true
 			}
@@ -94,7 +94,7 @@ os.close(dirfd)
 	var found bool
 	cmd := Command(python, "-c", script, dir, name)
 	cmd.Handler = testHandler{
-		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
 			if pathname == want {
 				found = true
 			}
@@ -143,7 +143,7 @@ func TestExecveatRelative(t *testing.T) {
 	var found bool
 	cmd := Command(python, "-c", script)
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
 				found = true
 			}
@@ -158,7 +158,7 @@ func TestExecveatRelative(t *testing.T) {
 
 	cmd = Command(python, "-c", script)
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			return pathname != truePath
 		},
 	}
@@ -189,7 +189,7 @@ func TestExecveatATEmptyPath(t *testing.T) {
 	var found bool
 	cmd := Command(python, "-c", script)
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
 				found = true
 			}
@@ -204,7 +204,7 @@ func TestExecveatATEmptyPath(t *testing.T) {
 
 	cmd = Command(python, "-c", script)
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			return pathname != truePath
 		},
 	}

@@ -78,7 +78,7 @@ type openHow struct {
 func handler(fd int, ntf *notif, h Handler) bool {
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
-		return h.Clone(ntf.pid, ntf.data.args[0])
+		return h.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0])
 
 	case unix.SYS_CLONE3:
 		n := ntf.data.args[1]
@@ -90,7 +90,7 @@ func handler(fd int, ntf *notif, h Handler) bool {
 			fmt.Printf("clone3: read flags: %s\n", err)
 			return false
 		}
-		return h.Clone(ntf.pid, binary.LittleEndian.Uint64(buf))
+		return h.Clone(ntf.pid, int(ntf.data.nr), binary.LittleEndian.Uint64(buf))
 
 	case unix.SYS_EXECVE:
 		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
@@ -108,7 +108,7 @@ func handler(fd int, ntf *notif, h Handler) bool {
 			fmt.Printf("execve: read env: %s\n", err)
 			return false
 		}
-		return h.Exec(ntf.pid, pathname, argv, env)
+		return h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, env)
 
 	case unix.SYS_EXECVEAT:
 		dirfd := int32(ntf.data.args[0])
@@ -150,10 +150,10 @@ func handler(fd int, ntf *notif, h Handler) bool {
 			fmt.Printf("execveat: read env: %s\n", err)
 			return false
 		}
-		return h.Exec(ntf.pid, pathname, argv, env)
+		return h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, env)
 
 	case unix.SYS_FORK, unix.SYS_VFORK:
-		return h.Clone(ntf.pid, 0)
+		return h.Clone(ntf.pid, int(ntf.data.nr), 0)
 
 	case unix.SYS_OPEN:
 		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
@@ -169,7 +169,8 @@ func handler(fd int, ntf *notif, h Handler) bool {
 			}
 			pathname = filepath.Join(cwd, pathname)
 		}
-		return h.Open(ntf.pid, pathname, int32(ntf.data.args[1]), uint32(ntf.data.args[2]))
+		return h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[1]),
+			uint32(ntf.data.args[2]))
 
 	case unix.SYS_OPENAT:
 		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
@@ -191,7 +192,8 @@ func handler(fd int, ntf *notif, h Handler) bool {
 			}
 			pathname = filepath.Join(dir, pathname)
 		}
-		return h.Open(ntf.pid, pathname, int32(ntf.data.args[2]), uint32(ntf.data.args[3]))
+		return h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[2]),
+			uint32(ntf.data.args[3]))
 
 	case unix.SYS_OPENAT2:
 		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
@@ -221,9 +223,9 @@ func handler(fd int, ntf *notif, h Handler) bool {
 			return false
 		}
 		oh = *(*openHow)(unsafe.Pointer(&buf[0]))
-		return h.Open(ntf.pid, pathname, int32(oh.flags), uint32(oh.mode))
+		return h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(oh.flags), uint32(oh.mode))
 
 	default:
-		return h.Syscall(ntf.pid, ntf.data.nr)
+		return h.Syscall(ntf.pid, int(ntf.data.nr))
 	}
 }

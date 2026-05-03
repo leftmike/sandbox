@@ -14,39 +14,43 @@ import (
 )
 
 type testHandler struct {
-	clone   func(pid uint32, flags uint64) bool
-	exec    func(pid uint32, pathname string, argv []string, env []string) bool
-	open    func(pid uint32, pathname string, flags int32, mode uint32) bool
-	syscall func(pid uint32, nr int32) bool
+	clone   func(pid uint32, sysnum int, flags uint64) bool
+	exec    func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
+	open    func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool
+	syscall func(pid uint32, sysnum int) bool
 }
 
-func (th testHandler) Clone(pid uint32, flags uint64) bool {
+func (th testHandler) Clone(pid uint32, sysnum int, flags uint64) bool {
 	if th.clone != nil {
-		return th.clone(pid, flags)
+		return th.clone(pid, sysnum, flags)
 	}
 
 	return true
 }
 
-func (th testHandler) Exec(pid uint32, pathname string, argv []string, env []string) bool {
+func (th testHandler) Exec(pid uint32, sysnum int, pathname string, argv []string,
+	env []string) bool {
+
 	if th.exec != nil {
-		return th.exec(pid, pathname, argv, env)
+		return th.exec(pid, sysnum, pathname, argv, env)
 	}
 
 	return true
 }
 
-func (th testHandler) Open(pid uint32, pathname string, flags int32, mode uint32) bool {
+func (th testHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
+	mode uint32) bool {
+
 	if th.open != nil {
-		return th.open(pid, pathname, flags, mode)
+		return th.open(pid, sysnum, pathname, flags, mode)
 	}
 
 	return true
 }
 
-func (th testHandler) Syscall(pid uint32, nr int32) bool {
+func (th testHandler) Syscall(pid uint32, sysnum int) bool {
 	if th.syscall != nil {
-		return th.syscall(pid, nr)
+		return th.syscall(pid, sysnum)
 	}
 
 	return true
@@ -287,7 +291,7 @@ func TestRunOpen(t *testing.T) {
 	cmd := Command("/bin/cat", f.Name())
 	cmd.Stdout = &buf
 	cmd.Handler = testHandler{
-		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
 			if pathname == f.Name() {
 				found = true
 			}
@@ -309,7 +313,7 @@ func TestRunOpen(t *testing.T) {
 
 	cmd = Command("/bin/cat", f.Name())
 	cmd.Handler = testHandler{
-		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
 			if pathname == f.Name() {
 				return false
 			}
@@ -332,7 +336,7 @@ func TestRunExec(t *testing.T) {
 	cmd := Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				found = true
 			}
@@ -356,7 +360,7 @@ func TestRunExec(t *testing.T) {
 	cmd = Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				return false
 			}
@@ -381,7 +385,7 @@ func TestRunExecArgv(t *testing.T) {
 
 	var gotArgv []string
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				gotArgv = argv
 			}
@@ -406,7 +410,7 @@ func TestRunExecEnv(t *testing.T) {
 
 	var gotEnv []string
 	cmd.Handler = testHandler{
-		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/true" {
 				gotEnv = env
 			}
@@ -439,7 +443,7 @@ t.join()
 	var threadCloned bool
 	cmd := Command(python, "-c", script)
 	cmd.Handler = testHandler{
-		clone: func(pid uint32, flags uint64) bool {
+		clone: func(pid uint32, sysnum int, flags uint64) bool {
 			if flags&unix.CLONE_THREAD != 0 {
 				threadCloned = true
 			}
@@ -461,7 +465,7 @@ func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := Command("/bin/sh", "-c", "/bin/true")
 	cmd.Handler = testHandler{
-		clone: func(pid uint32, flags uint64) bool {
+		clone: func(pid uint32, sysnum int, flags uint64) bool {
 			cloned = true
 			return true
 		},
@@ -478,7 +482,7 @@ func TestRunClone(t *testing.T) {
 
 	cmd = Command("/bin/sh", "-c", "/bin/true")
 	cmd.Handler = testHandler{
-		clone: func(pid uint32, flags uint64) bool {
+		clone: func(pid uint32, sysnum int, flags uint64) bool {
 			return false
 		},
 	}
