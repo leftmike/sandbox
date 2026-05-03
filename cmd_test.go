@@ -262,8 +262,6 @@ func TestRun(t *testing.T) {
 
 	for _, c := range cases {
 		cmd := Command(c.cmd)
-		cmd.Stdout = io.Discard
-		cmd.Stderr = io.Discard
 		cmd.Handler = testHandler{}
 
 		ret, err := exitCode(cmd.Run())
@@ -288,7 +286,6 @@ func TestRunOpen(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := Command("/bin/cat", f.Name())
 	cmd.Stdout = &buf
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
 			if pathname == f.Name() {
@@ -311,8 +308,6 @@ func TestRunOpen(t *testing.T) {
 	}
 
 	cmd = Command("/bin/cat", f.Name())
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
 			if pathname == f.Name() {
@@ -336,7 +331,6 @@ func TestRunExec(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
@@ -361,7 +355,6 @@ func TestRunExec(t *testing.T) {
 	buf.Reset()
 	cmd = Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
@@ -385,8 +378,6 @@ func TestRunExec(t *testing.T) {
 func TestRunExecArgv(t *testing.T) {
 	want := []string{"/bin/echo", "hello", "world"}
 	cmd := Command(want[0], want[1:]...)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 
 	var gotArgv []string
 	cmd.Handler = testHandler{
@@ -412,8 +403,6 @@ func TestRunExecEnv(t *testing.T) {
 	wantEnv := []string{"FOO=bar", "BAZ=qux"}
 	cmd := Command("/bin/true")
 	cmd.Env = wantEnv
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 
 	var gotEnv []string
 	cmd.Handler = testHandler{
@@ -449,8 +438,6 @@ t.join()
 `
 	var threadCloned bool
 	cmd := Command(python, "-c", script)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		clone: func(pid uint32, flags uint64) bool {
 			if flags&unix.CLONE_THREAD != 0 {
@@ -473,8 +460,6 @@ t.join()
 func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := Command("/bin/sh", "-c", "/bin/true")
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		clone: func(pid uint32, flags uint64) bool {
 			cloned = true
@@ -492,8 +477,6 @@ func TestRunClone(t *testing.T) {
 	}
 
 	cmd = Command("/bin/sh", "-c", "/bin/true")
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		clone: func(pid uint32, flags uint64) bool {
 			return false

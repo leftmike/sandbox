@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,8 +19,6 @@ func TestOpenatAbsolute(t *testing.T) {
 
 	var found bool
 	cmd := Command("/bin/cat", want)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
 			if pathname == want {
@@ -51,8 +48,6 @@ func TestOpenatATFDCWD(t *testing.T) {
 	var found bool
 	cmd := Command("/bin/cat", name)
 	cmd.Dir = dir
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
 			if pathname == want {
@@ -98,8 +93,6 @@ os.close(dirfd)
 `
 	var found bool
 	cmd := Command(python, "-c", script, dir, name)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		open: func(pid uint32, pathname string, flags int32, mode uint32) bool {
 			if pathname == want {
@@ -149,8 +142,6 @@ func TestExecveatRelative(t *testing.T) {
 
 	var found bool
 	cmd := Command(python, "-c", script)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
@@ -166,8 +157,6 @@ func TestExecveatRelative(t *testing.T) {
 	}
 
 	cmd = Command(python, "-c", script)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			return pathname != truePath
@@ -199,8 +188,6 @@ func TestExecveatATEmptyPath(t *testing.T) {
 
 	var found bool
 	cmd := Command(python, "-c", script)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
@@ -216,8 +203,6 @@ func TestExecveatATEmptyPath(t *testing.T) {
 	}
 
 	cmd = Command(python, "-c", script)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
 			return pathname != truePath
