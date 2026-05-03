@@ -195,10 +195,11 @@ func (cmd *Cmd) Wait() error {
 
 	unix.Close(cmd.closeFd)
 
-	syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	pid := cmd.Process.Pid
+	syscall.Kill(-pid, syscall.SIGTERM)
 	go func() {
 		time.Sleep(time.Second)
-		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		syscall.Kill(-pid, syscall.SIGKILL)
 	}()
 
 	return err
