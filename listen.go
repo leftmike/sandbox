@@ -217,7 +217,7 @@ func handler(fd int, ntf *notif, h Handler) bool {
 		var oh openHow
 		buf, err := readMemory(fd, ntf, uintptr(ntf.data.args[2]), unsafe.Sizeof(oh))
 		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
-			fmt.Printf("openat2: read open_memory how: %s\n", err)
+			fmt.Printf("openat2: read open_how: %s\n", err)
 			return false
 		}
 		oh = *(*openHow)(unsafe.Pointer(&buf[0]))
