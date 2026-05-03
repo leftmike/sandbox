@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 )
 
 type syscallHandler struct{}
@@ -44,5 +45,11 @@ func main() {
 	cmd.Stderr = os.Stderr
 
 	err := cmd.Run()
-	fmt.Printf("%s: %s\n", os.Args[1], err)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[1], err)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode())
+		}
+		os.Exit(1)
+	}
 }
