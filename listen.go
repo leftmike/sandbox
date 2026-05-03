@@ -110,10 +110,34 @@ func handler(fd int, ntf *notif, h Handler) bool {
 		return h.Exec(ntf.pid, pathname, argv, env)
 
 	case unix.SYS_EXECVEAT:
-		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
-		if err != nil {
-			fmt.Printf("execveat: read pathname: %s\n", err)
-			return false
+		dirfd := int32(ntf.data.args[0])
+		var pathname string
+		var err error
+		if ntf.data.args[4]&unix.AT_EMPTY_PATH != 0 {
+			pathname, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
+			if err != nil {
+				fmt.Printf("execveat: resolve dirfd (AT_EMPTY_PATH): %s\n", err)
+				return false
+			}
+		} else {
+			pathname, err = readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
+			if err != nil {
+				fmt.Printf("execveat: read pathname: %s\n", err)
+				return false
+			}
+			if !filepath.IsAbs(pathname) {
+				var dir string
+				if dirfd == unix.AT_FDCWD {
+					dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
+				} else {
+					dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
+				}
+				if err != nil {
+					fmt.Printf("execveat: resolve dirfd: %s\n", err)
+					return false
+				}
+				pathname = filepath.Join(dir, pathname)
+			}
 		}
 		argv, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[2]), 4096)
 		if err != nil {

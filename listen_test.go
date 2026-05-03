@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -112,5 +113,120 @@ os.close(dirfd)
 		t.Errorf("Run() failed with %s", err)
 	} else if !found {
 		t.Errorf("openat(%s, %s): handler(%s) not called", dir, name, want)
+	}
+}
+
+const (
+	// Python script that calls execveat(dirfd, name, argv, envp, flags)
+	execveatScript = `import ctypes, os, sys
+SYS_execveat = 322
+libc = ctypes.CDLL(None)
+fd = %s
+argv = (ctypes.c_char_p * 2)(b'true', None)
+envp = (ctypes.c_char_p * 1)(None)
+libc.syscall(ctypes.c_long(SYS_execveat), ctypes.c_long(fd), ctypes.c_char_p(%s), argv, envp, ctypes.c_long(%s))
+sys.exit(1)
+`
+)
+
+func TestExecveatRelative(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not available")
+	}
+	trueDir := filepath.Dir(truePath)
+	trueBase := filepath.Base(truePath)
+
+	// execveat(dirfd_to_trueDir, trueBase, ..., 0): relative path resolved via dirfd.
+	script := fmt.Sprintf(execveatScript,
+		fmt.Sprintf(`os.open(%q, os.O_RDONLY)`, trueDir),
+		fmt.Sprintf(`b%q`, trueBase),
+		`0`)
+
+	var found bool
+	cmd := Command(python, "-c", script)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+			if pathname == truePath {
+				found = true
+			}
+			return true
+		},
+	}
+	if err := cmd.Run(); err != nil {
+		t.Errorf("Run() failed: %s", err)
+	} else if !found {
+		t.Errorf("execveat(dirfd, %q): handler not called with %s", trueBase, truePath)
+	}
+
+	cmd = Command(python, "-c", script)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+			return pathname != truePath
+		},
+	}
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed: %s", err)
+	} else if ret == 0 {
+		t.Errorf("execveat(dirfd, %q) denied but process exited 0", trueBase)
+	}
+}
+
+func TestExecveatATEmptyPath(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not available")
+	}
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not available")
+	}
+
+	// execveat(fd_to_truePath, "", ..., AT_EMPTY_PATH): file identified by fd alone.
+	script := fmt.Sprintf(execveatScript,
+		fmt.Sprintf(`os.open(%q, os.O_RDONLY)`, truePath),
+		`b''`,
+		`0x1000`)
+
+	var found bool
+	cmd := Command(python, "-c", script)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+			if pathname == truePath {
+				found = true
+			}
+			return true
+		},
+	}
+	if err := cmd.Run(); err != nil {
+		t.Errorf("Run() failed: %s", err)
+	} else if !found {
+		t.Errorf("execveat(fd, '', AT_EMPTY_PATH): handler not called with %s", truePath)
+	}
+
+	cmd = Command(python, "-c", script)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, pathname string, argv []string, env []string) bool {
+			return pathname != truePath
+		},
+	}
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Errorf("Run() failed: %s", err)
+	} else if ret == 0 {
+		t.Errorf("execveat(fd, '', AT_EMPTY_PATH) denied but process exited 0")
 	}
 }
