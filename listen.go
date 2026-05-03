@@ -24,16 +24,17 @@ func recvFd(fd int) (int, error) {
 		return -1, err
 	}
 
-	for _, msg := range msgs {
-		if msg.Header.Level == unix.SOL_SOCKET && msg.Header.Type == unix.SCM_RIGHTS {
-			fds, err := unix.ParseUnixRights(&msg)
-			if err != nil {
-				return -1, err
-			} else if len(fds) > 0 {
-				return fds[0], nil
-			}
+	if len(msgs) == 1 && msgs[0].Header.Level == unix.SOL_SOCKET &&
+		msgs[0].Header.Type == unix.SCM_RIGHTS {
+
+		fds, err := unix.ParseUnixRights(&msgs[0])
+		if err != nil {
+			return -1, err
+		} else if len(fds) == 1 {
+			return fds[0], nil
 		}
 	}
+
 	return -1, errors.New("sandbox: no fd from child")
 }
 
