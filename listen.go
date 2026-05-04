@@ -46,14 +46,14 @@ func sendConfig(fd int, cfg *childConfig) error {
 	return unix.Sendmsg(fd, buf, nil, nil, 0)
 }
 
-func listen(fd int, cancelFd int, h Handler) error {
+func listenNotif(fd int, cancelFd int, h Handler) error {
 	for {
 		ntf, err := ioctlNotifRecv(fd, cancelFd)
 		if err != nil || ntf == nil {
 			return err
 		}
 
-		allowed := handler(fd, ntf, h)
+		allowed := handleNotif(fd, ntf, h)
 
 		rsp := notifResp{id: ntf.id}
 		if allowed {
@@ -75,7 +75,7 @@ type openHow struct {
 	resolve uint64
 }
 
-func handler(fd int, ntf *notif, h Handler) bool {
+func handleNotif(fd int, ntf *notif, h Handler) bool {
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
 		return h.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0])
@@ -152,26 +152,6 @@ func handler(fd int, ntf *notif, h Handler) bool {
 		}
 		return h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, env)
 
-	case unix.SYS_FORK, unix.SYS_VFORK:
-		return h.Clone(ntf.pid, int(ntf.data.nr), 0)
-
-	case unix.SYS_OPEN:
-		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
-		if err != nil {
-			fmt.Printf("open: read string: %s\n", err)
-			return false
-		}
-		if !filepath.IsAbs(pathname) {
-			cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
-			if err != nil {
-				fmt.Printf("open: resolve cwd: %s\n", err)
-				return false
-			}
-			pathname = filepath.Join(cwd, pathname)
-		}
-		return h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[1]),
-			uint32(ntf.data.args[2]))
-
 	case unix.SYS_OPENAT:
 		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
 		if err != nil {
@@ -226,6 +206,25 @@ func handler(fd int, ntf *notif, h Handler) bool {
 		return h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(oh.flags), uint32(oh.mode))
 
 	default:
-		return h.Syscall(ntf.pid, int(ntf.data.nr))
+		return handleNotifArch(fd, ntf, h)
+	}
+}
+
+func init() {
+	for n, s := range Sysnums {
+		if s != "" {
+			sysnum, ok := syscalls[s]
+			if !ok {
+				panic(fmt.Sprintf("syscalls missing %s", s))
+			} else if sysnum != n {
+				panic(fmt.Sprintf("%s: syscalls: %d; sysnums: %d", s, sysnum, n))
+			}
+		}
+	}
+
+	for s, n := range syscalls {
+		if Sysnums[n] != s {
+			panic(fmt.Sprintf("%d: syscalls: %s; sysnums: %s", n, s, Sysnums[n]))
+		}
 	}
 }

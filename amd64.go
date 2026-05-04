@@ -5,12 +5,41 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"golang.org/x/sys/unix"
 )
 
+func handleNotifArch(fd int, ntf *notif, h Handler) bool {
+	switch ntf.data.nr {
+	case unix.SYS_FORK, unix.SYS_VFORK:
+		return h.Clone(ntf.pid, int(ntf.data.nr), 0)
+
+	case unix.SYS_OPEN:
+		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
+		if err != nil {
+			fmt.Printf("open: read string: %s\n", err)
+			return false
+		}
+		if !filepath.IsAbs(pathname) {
+			cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
+			if err != nil {
+				fmt.Printf("open: resolve cwd: %s\n", err)
+				return false
+			}
+			pathname = filepath.Join(cwd, pathname)
+		}
+		return h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[1]),
+			uint32(ntf.data.args[2]))
+
+	default:
+		return h.Syscall(ntf.pid, int(ntf.data.nr))
+	}
+}
+
 var (
-	SysNums = []string{
+	Sysnums = []string{
 		unix.SYS_READ:                    "read",
 		unix.SYS_WRITE:                   "write",
 		unix.SYS_OPEN:                    "open",
@@ -776,22 +805,3 @@ var (
 		"open_tree_attr":          unix.SYS_OPEN_TREE_ATTR,
 	}
 )
-
-func init() {
-	for n, s := range SysNums {
-		if s != "" {
-			sysnum, ok := syscalls[s]
-			if !ok {
-				panic(fmt.Sprintf("syscalls missing %s", s))
-			} else if sysnum != n {
-				panic(fmt.Sprintf("%s: syscalls: %d; sysnums: %d", s, sysnum, n))
-			}
-		}
-	}
-
-	for s, n := range syscalls {
-		if SysNums[n] != s {
-			panic(fmt.Sprintf("%d: syscalls: %s; sysnums: %s", n, s, SysNums[n]))
-		}
-	}
-}
