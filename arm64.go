@@ -3,13 +3,21 @@
 // Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_arm64.go
 package main
 
-import "golang.org/x/sys/unix"
+import (
+	"golang.org/x/sys/unix"
+)
+
+const (
+	auditArch = unix.AUDIT_ARCH_AARCH64
+)
 
 func handleNotifArch(fd int, ntf *notif, h Handler) bool {
 	return h.Syscall(ntf.pid, int(ntf.data.nr))
 }
 
 var (
+	archSockFilter = []unix.SockFilter{}
+
 	Sysnums = []string{
 		unix.SYS_IO_SETUP:                "io_setup",
 		unix.SYS_IO_DESTROY:              "io_destroy",

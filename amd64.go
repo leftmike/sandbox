@@ -11,6 +11,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const (
+	auditArch = unix.AUDIT_ARCH_X86_64
+)
+
 func handleNotifArch(fd int, ntf *notif, h Handler) bool {
 	switch ntf.data.nr {
 	case unix.SYS_FORK, unix.SYS_VFORK:
@@ -39,6 +43,20 @@ func handleNotifArch(fd int, ntf *notif, h Handler) bool {
 }
 
 var (
+	archSockFilter = []unix.SockFilter{
+		// fork
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_FORK, Jt: 0, Jf: 1},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+
+		// open
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_OPEN, Jt: 0, Jf: 1},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+
+		// vfork
+		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_VFORK, Jt: 0, Jf: 1},
+		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+	}
+
 	Sysnums = []string{
 		unix.SYS_READ:                    "read",
 		unix.SYS_WRITE:                   "write",
