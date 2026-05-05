@@ -461,6 +461,102 @@ t.join()
 	}
 }
 
+// skipIfNoUserNS skips the test if unprivileged user namespaces are unavailable.
+func skipIfNoUserNS(t *testing.T) {
+	t.Helper()
+	data, err := os.ReadFile("/proc/sys/kernel/unprivileged_userns_clone")
+	if err == nil && strings.TrimSpace(string(data)) == "0" {
+		t.Skip("kernel.unprivileged_userns_clone=0")
+	}
+}
+
+func TestCmdAllowedExecsAllows(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	echoPath, err := exec.LookPath("echo")
+	if err != nil {
+		t.Skip("echo not found")
+	}
+
+	var buf bytes.Buffer
+	cmd := Command(echoPath, "hello")
+	cmd.Stdout = &buf
+	cmd.AllowedExecs = []string{echoPath}
+	cmd.Handler = testHandler{}
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "hello" {
+		t.Errorf("stdout: got %q want %q", got, "hello")
+	}
+}
+
+func TestCmdAllowedExecsBlocks(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	catPath, err := exec.LookPath("cat")
+	if err != nil {
+		t.Skip("cat not found")
+	}
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not found")
+	}
+
+	// catPath is NOT in AllowedExecs so its exec is blocked by the listener pre-check.
+	cmd := Command(catPath, "/etc/hostname")
+	cmd.AllowedExecs = []string{truePath}
+	cmd.Handler = testHandler{}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Fatalf("Run() unexpected error: %v", err)
+	}
+	if ret == 0 {
+		t.Error("Run() expected non-zero exit (exec blocked), got 0")
+	}
+}
+
+func TestCmdAllowedExecsSubprocess(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh not found")
+	}
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not found")
+	}
+
+	// sh is allowed; "exit 42" uses no subprocess exec.
+	cmd := Command(shPath, "-c", "exit 42")
+	cmd.AllowedExecs = []string{shPath}
+	cmd.Handler = testHandler{}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Fatalf("sh exit 42: unexpected error: %v", err)
+	}
+	if ret != 42 {
+		t.Errorf("sh exit 42: got exit %d want 42", ret)
+	}
+
+	// sh tries to exec truePath (not in AllowedExecs): seccomp listener blocks it.
+	cmd = Command(shPath, "-c", truePath)
+	cmd.AllowedExecs = []string{shPath}
+	cmd.Handler = testHandler{}
+
+	ret, err = exitCode(cmd.Run())
+	if err != nil {
+		t.Fatalf("sh -c true: unexpected error: %v", err)
+	}
+	if ret == 0 {
+		t.Errorf("sh -c true with %s blocked should fail, got exit 0", truePath)
+	}
+}
+
 func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := Command("/bin/sh", "-c", "/bin/true")

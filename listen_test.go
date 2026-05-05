@@ -8,6 +8,42 @@ import (
 	"testing"
 )
 
+func TestAllowedExecsListenerPrecheck(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	echoPath, err := exec.LookPath("echo")
+	if err != nil {
+		t.Skip("echo not found")
+	}
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not found")
+	}
+
+	// AllowedExecs contains only truePath. echoPath is not in the list.
+	// The listener pre-check must block echoPath before calling Handler.Exec.
+	var handlerCalled bool
+	cmd := Command(echoPath, "hello")
+	cmd.AllowedExecs = []string{truePath}
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			handlerCalled = true
+			return true
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Fatalf("Run() unexpected error: %v", err)
+	}
+	if ret == 0 {
+		t.Error("exec should have been blocked by allowlist pre-check")
+	}
+	if handlerCalled {
+		t.Error("Handler.Exec must not be called for a path blocked by the allowlist")
+	}
+}
+
 func TestOpenatAbsolute(t *testing.T) {
 	f, err := os.CreateTemp("", "openat-abs")
 	if err != nil {

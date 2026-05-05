@@ -22,7 +22,9 @@ type Handler interface {
 type Cmd struct {
 	exec.Cmd
 
-	Handler Handler
+	Handler      Handler
+	AllowedExecs []string // if non-nil, only these absolute paths may be executed
+	BindMounts   []string // additional paths to bind-mount into the sandbox root
 
 	closeFd int
 	waitCh  chan error
@@ -120,16 +122,32 @@ func (cmd *Cmd) Start() (err error) {
 
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
-		Path:   cmd.Path,
-		Args:   cmd.Args,
-		Env:    cmd.Env,
-		Filter: defaultSockFilter,
+		Path:         cmd.Path,
+		Args:         cmd.Args,
+		Env:          cmd.Env,
+		Filter:       defaultSockFilter,
+		AllowedExecs: cmd.AllowedExecs,
+		BindMounts:   cmd.BindMounts,
 	}
 
 	cmd.Path = "/proc/self/exe" // XXX: os.Executable()?
 	cmd.Args = []string{"__sandbox_child"}
 	cmd.ExtraFiles = []*os.File{cf}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	// When AllowedExecs is set, fork the child directly into new user+mount namespaces.
+	// The Go runtime is multi-threaded, so unshare(CLONE_NEWUSER) from within the child
+	// would fail with EINVAL; using Cloneflags on the fork avoids that limitation.
+	// UidMappings/GidMappings are written by Go's runtime immediately after the fork,
+	// before exec(), so the child has the correct capability set when it starts.
+	attr := &syscall.SysProcAttr{Setpgid: true}
+	if len(cmd.AllowedExecs) > 0 {
+		uid := os.Getuid()
+		gid := os.Getgid()
+		attr.Cloneflags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS
+		attr.UidMappings = []syscall.SysProcIDMap{{ContainerID: uid, HostID: uid, Size: 1}}
+		attr.GidMappings = []syscall.SysProcIDMap{{ContainerID: gid, HostID: gid, Size: 1}}
+	}
+	cmd.SysProcAttr = attr
 
 	err = cmd.Cmd.Start()
 	cf.Close()
@@ -149,7 +167,7 @@ func (cmd *Cmd) Start() (err error) {
 
 	cmd.waitCh = make(chan error, 2)
 	go func() {
-		err := listenNotif(fd, pipe[0], cmd.Handler)
+		err := listenNotif(fd, pipe[0], cmd.Handler, cmd.AllowedExecs)
 		if err != nil {
 			cmd.waitCh <- err
 		}
@@ -185,6 +203,10 @@ func (cmd *Cmd) childFailed(err error) error {
 			return errors.New("child: receiving config from sandbox failed")
 		case childExecCommandFailed:
 			return errors.New("child: executing command failed")
+		case childMountFailed:
+			return errors.New("child: setting up mount namespace failed")
+		case childPivotRootFailed:
+			return errors.New("child: pivot_root failed")
 		}
 	}
 

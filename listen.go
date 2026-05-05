@@ -46,14 +46,14 @@ func sendConfig(fd int, cfg *childConfig) error {
 	return unix.Sendmsg(fd, buf, nil, nil, 0)
 }
 
-func listenNotif(fd int, cancelFd int, h Handler) error {
+func listenNotif(fd int, cancelFd int, h Handler, allowedExecs []string) error {
 	for {
 		ntf, err := ioctlNotifRecv(fd, cancelFd)
 		if err != nil || ntf == nil {
 			return err
 		}
 
-		allowed := handleNotif(fd, ntf, h)
+		allowed := handleNotif(fd, ntf, h, allowedExecs)
 
 		rsp := notifResp{id: ntf.id}
 		if allowed {
@@ -69,13 +69,27 @@ func listenNotif(fd int, cancelFd int, h Handler) error {
 	}
 }
 
+// execAllowed reports whether pathname is in the allowlist.
+// When the allowlist is empty all paths are permitted.
+func execAllowed(pathname string, allowedExecs []string) bool {
+	if len(allowedExecs) == 0 {
+		return true
+	}
+	for _, a := range allowedExecs {
+		if a == pathname {
+			return true
+		}
+	}
+	return false
+}
+
 type openHow struct {
 	flags   uint64
 	mode    uint64
 	resolve uint64
 }
 
-func handleNotif(fd int, ntf *notif, h Handler) bool {
+func handleNotif(fd int, ntf *notif, h Handler, allowedExecs []string) bool {
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
 		return h.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0])
@@ -96,6 +110,9 @@ func handleNotif(fd int, ntf *notif, h Handler) bool {
 		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
 		if err != nil {
 			fmt.Printf("execve: read pathname: %s\n", err)
+			return false
+		}
+		if !execAllowed(pathname, allowedExecs) {
 			return false
 		}
 		argv, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[1]), 4096)
@@ -139,6 +156,9 @@ func handleNotif(fd int, ntf *notif, h Handler) bool {
 				}
 				pathname = filepath.Join(dir, pathname)
 			}
+		}
+		if !execAllowed(pathname, allowedExecs) {
+			return false
 		}
 		argv, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[2]), 4096)
 		if err != nil {
@@ -209,6 +229,7 @@ func handleNotif(fd int, ntf *notif, h Handler) bool {
 		return handleNotifArch(fd, ntf, h)
 	}
 }
+
 
 func init() {
 	for n, s := range Sysnums {
