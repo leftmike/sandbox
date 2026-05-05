@@ -16,7 +16,9 @@ func handleNotifArch(fd int, ntf *notif, h Handler) bool {
 }
 
 var (
-	archSockFilter = []unix.SockFilter{}
+	archNotifiedSyscalls = []int{}
+	archKilledSyscalls   = []int{}
+	archBlockedSyscalls  = []int{}
 
 	Sysnums = []string{
 		unix.SYS_IO_SETUP:                "io_setup",

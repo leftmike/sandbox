@@ -43,18 +43,38 @@ func handleNotifArch(fd int, ntf *notif, h Handler) bool {
 }
 
 var (
-	archSockFilter = []unix.SockFilter{
-		// fork
-		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_FORK, Jt: 0, Jf: 1},
-		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+	archNotifiedSyscalls = []int{
+		unix.SYS_FORK,
+		unix.SYS_VFORK,
+		unix.SYS_OPEN,
+	}
 
-		// open
-		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_OPEN, Jt: 0, Jf: 1},
-		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+	archKilledSyscalls = []int{}
 
-		// vfork
-		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_VFORK, Jt: 0, Jf: 1},
-		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+	archBlockedSyscalls = []int{
+		// I/O port access.
+		unix.SYS_IOPL,
+		unix.SYS_IOPERM,
+
+		// Obsolete / unimplemented on modern kernels.
+		unix.SYS__SYSCTL,
+		unix.SYS_AFS_SYSCALL,
+		unix.SYS_TUXCALL,
+		unix.SYS_VSERVER,
+		unix.SYS_GETPMSG,
+		unix.SYS_PUTPMSG,
+		unix.SYS_SECURITY,
+		unix.SYS_USELIB,
+		unix.SYS_USTAT,
+		unix.SYS_SYSFS,
+
+		// Legacy module loading interfaces.
+		unix.SYS_CREATE_MODULE,
+		unix.SYS_GET_KERNEL_SYMS,
+		unix.SYS_QUERY_MODULE,
+
+		// LDT manipulation.
+		unix.SYS_MODIFY_LDT,
 	}
 
 	Sysnums = []string{
