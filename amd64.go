@@ -15,30 +15,41 @@ const (
 	auditArch = unix.AUDIT_ARCH_X86_64
 )
 
-func handleNotifArch(fd int, ntf *notif, h Handler) bool {
+func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_FORK, unix.SYS_VFORK:
-		return h.Clone(ntf.pid, int(ntf.data.nr), 0)
+		if h.Clone(ntf.pid, int(ntf.data.nr), 0) {
+			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+		}
+		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPEN:
 		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
 		if err != nil {
 			fmt.Printf("open: read string: %s\n", err)
-			return false
+			return 0, -int32(unix.EACCES)
 		}
 		if !filepath.IsAbs(pathname) {
 			cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
 			if err != nil {
 				fmt.Printf("open: resolve cwd: %s\n", err)
-				return false
+				return 0, -int32(unix.EACCES)
 			}
 			pathname = filepath.Join(cwd, pathname)
 		}
-		return h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[1]),
-			uint32(ntf.data.args[2]))
+		if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[1]),
+			uint32(ntf.data.args[2])) {
+
+			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+		}
+		return 0, -int32(unix.EACCES)
 
 	default:
-		return h.Syscall(ntf.pid, int(ntf.data.nr))
+		if h.Syscall(ntf.pid, int(ntf.data.nr)) {
+			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+		}
+		return 0, -int32(unix.EACCES)
+
 	}
 }
 

@@ -70,6 +70,14 @@ type notifResp struct {
 	flags uint32
 }
 
+type notifAddfd struct {
+	id         uint64
+	flags      uint32
+	srcfd      uint32
+	newfd      uint32
+	newfdFlags uint32
+}
+
 func ioctlNotifRecv(fd int, cancelFd int) (*notif, error) {
 	buf := make([]byte, notifSize)
 	pfds := []unix.PollFd{
@@ -190,4 +198,18 @@ func ioctlNotifSend(fd int, rsp notifResp) error {
 		return errno
 	}
 	return nil
+}
+
+func ioctlNotifAddfd(fd int, addfd notifAddfd) error {
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ADDFD,
+		uintptr(unsafe.Pointer(&addfd)))
+	if errno != 0 {
+		// ENOENT: child died between recv and send
+		if errors.Is(errno, unix.ENOENT) {
+			return nil
+		}
+		return errno
+	}
+	return nil
+
 }
