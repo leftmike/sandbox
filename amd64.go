@@ -1,6 +1,5 @@
 //go:build amd64 && linux
 
-// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_amd64.go
 package main
 
 import (
@@ -19,7 +18,7 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_FORK, unix.SYS_VFORK:
 		if h.Clone(ntf.pid, int(ntf.data.nr), 0) {
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
@@ -40,13 +39,13 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 		if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[1]),
 			uint32(ntf.data.args[2])) {
 
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
 	default:
 		if h.Syscall(ntf.pid, int(ntf.data.nr)) {
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
@@ -68,6 +67,7 @@ var (
 		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
 	}
 
+	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_amd64.go
 	Sysnums = []string{
 		unix.SYS_READ:                    "read",
 		unix.SYS_WRITE:                   "write",

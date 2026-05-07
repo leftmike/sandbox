@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
+)
+
+const (
+	continueSyscall = math.MaxInt32 / 3
 )
 
 func recvFd(fd int) (int, error) {
@@ -57,9 +62,8 @@ func listenNotif(fd int, cancelFd int, h Handler) error {
 
 		rsp := notifResp{id: ntf.id}
 		if errno > 0 {
-			if errno != unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE {
-				panic(fmt.Sprintf("errno > 0 && errno != SECCOMP_USER_NOTIF_FLAG_CONTINUE: %d",
-					errno))
+			if errno != continueSyscall {
+				panic(fmt.Sprintf("errno > 0 && errno != continueSyscall: %d", errno))
 			}
 			rsp.flags = unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
 		} else if errno < 0 {
@@ -85,7 +89,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
 		if h.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0]) {
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
@@ -100,7 +104,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 			return 0, -int32(unix.EACCES)
 		}
 		if h.Clone(ntf.pid, int(ntf.data.nr), binary.LittleEndian.Uint64(buf)) {
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
@@ -121,7 +125,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 			return 0, -int32(unix.EACCES)
 		}
 		if h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, env) {
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
@@ -166,7 +170,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 			return 0, -int32(unix.EACCES)
 		}
 		if h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, env) {
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
@@ -193,7 +197,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[2]),
 			uint32(ntf.data.args[3])) {
 
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
@@ -226,7 +230,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		}
 		oh = *(*openHow)(unsafe.Pointer(&buf[0]))
 		if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(oh.flags), uint32(oh.mode)) {
-			return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 

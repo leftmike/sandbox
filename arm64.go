@@ -1,6 +1,5 @@
 //go:build arm64 && linux
 
-// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_arm64.go
 package main
 
 import (
@@ -13,7 +12,7 @@ const (
 
 func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 	if h.Syscall(ntf.pid, int(ntf.data.nr)) {
-		return 0, unix.SECCOMP_USER_NOTIF_FLAG_CONTINUE
+		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)
 }
@@ -21,6 +20,7 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 var (
 	archSockFilter = []unix.SockFilter{}
 
+	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_arm64.go
 	Sysnums = []string{
 		unix.SYS_IO_SETUP:                "io_setup",
 		unix.SYS_IO_DESTROY:              "io_destroy",
