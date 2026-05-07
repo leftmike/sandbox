@@ -19,7 +19,7 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPEN:
-		return handleOpen(fd, ntf, h, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
+		return handleOpenat(fd, ntf, h, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
 			ntf.data.args[2], 0)
 
 	default:

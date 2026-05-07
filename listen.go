@@ -117,8 +117,8 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 			ntf.data.args[2], ntf.data.args[3], ntf.data.args[4])
 
 	case unix.SYS_OPENAT:
-		return handleOpen(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], ntf.data.args[2],
-			ntf.data.args[3], 0)
+		return handleOpenat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1],
+			ntf.data.args[2], ntf.data.args[3], 0)
 
 	case unix.SYS_OPENAT2:
 		var oh openHow
@@ -129,7 +129,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		}
 		oh = *(*openHow)(unsafe.Pointer(&buf[0]))
 
-		return handleOpen(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], oh.flags,
+		return handleOpenat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], oh.flags,
 			oh.mode, oh.resolve)
 
 	default:
@@ -137,7 +137,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 	}
 }
 
-func handleOpen(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
+func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 	resolve uint64) (int64, int32) {
 
 	pathname, err := readString(fd, ntf, path, 2048)
