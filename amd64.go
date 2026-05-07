@@ -23,7 +23,7 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPEN:
-		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
+		pathname, err := readString(fd, ntf, ntf.data.args[0], 2048)
 		if err != nil {
 			fmt.Printf("open: read string: %s\n", err)
 			return 0, -int32(unix.EACCES)

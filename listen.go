@@ -98,7 +98,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		if n > 512 {
 			n = 512
 		}
-		buf, err := readMemory(fd, ntf, uintptr(ntf.data.args[0]), uintptr(n))
+		buf, err := readMemory(fd, ntf, ntf.data.args[0], n)
 		if err != nil || len(buf) < 8 {
 			fmt.Printf("clone3: read flags: %s\n", err)
 			return 0, -int32(unix.EACCES)
@@ -109,17 +109,17 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_EXECVE:
-		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[0]), 2048)
+		pathname, err := readString(fd, ntf, ntf.data.args[0], 2048)
 		if err != nil {
 			fmt.Printf("execve: read pathname: %s\n", err)
 			return 0, -int32(unix.EACCES)
 		}
-		argv, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[1]), 4096)
+		argv, err := readStringSlice(fd, ntf, ntf.data.args[1], 4096)
 		if err != nil {
 			fmt.Printf("execve: read argv: %s\n", err)
 			return 0, -int32(unix.EACCES)
 		}
-		env, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[2]), 4096)
+		env, err := readStringSlice(fd, ntf, ntf.data.args[2], 4096)
 		if err != nil {
 			fmt.Printf("execve: read env: %s\n", err)
 			return 0, -int32(unix.EACCES)
@@ -140,7 +140,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 				return 0, -int32(unix.EACCES)
 			}
 		} else {
-			pathname, err = readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
+			pathname, err = readString(fd, ntf, ntf.data.args[1], 2048)
 			if err != nil {
 				fmt.Printf("execveat: read pathname: %s\n", err)
 				return 0, -int32(unix.EACCES)
@@ -159,12 +159,12 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 				pathname = filepath.Join(dir, pathname)
 			}
 		}
-		argv, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[2]), 4096)
+		argv, err := readStringSlice(fd, ntf, ntf.data.args[2], 4096)
 		if err != nil {
 			fmt.Printf("execveat: read argv: %s\n", err)
 			return 0, -int32(unix.EACCES)
 		}
-		env, err := readStringSlice(fd, ntf, uintptr(ntf.data.args[3]), 4096)
+		env, err := readStringSlice(fd, ntf, ntf.data.args[3], 4096)
 		if err != nil {
 			fmt.Printf("execveat: read env: %s\n", err)
 			return 0, -int32(unix.EACCES)
@@ -175,7 +175,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPENAT:
-		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
+		pathname, err := readString(fd, ntf, ntf.data.args[1], 2048)
 		if err != nil {
 			fmt.Printf("openat: read string: %s\n", err)
 			return 0, -int32(unix.EACCES)
@@ -202,7 +202,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPENAT2:
-		pathname, err := readString(fd, ntf, uintptr(ntf.data.args[1]), 2048)
+		pathname, err := readString(fd, ntf, ntf.data.args[1], 2048)
 		if err != nil {
 			fmt.Printf("openat2: read pathname: %s\n", err)
 			return 0, -int32(unix.EACCES)
@@ -223,7 +223,7 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		}
 
 		var oh openHow
-		buf, err := readMemory(fd, ntf, uintptr(ntf.data.args[2]), unsafe.Sizeof(oh))
+		buf, err := readMemory(fd, ntf, ntf.data.args[2], uint64(unsafe.Sizeof(oh)))
 		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
 			fmt.Printf("openat2: read open_how: %s\n", err)
 			return 0, -int32(unix.EACCES)

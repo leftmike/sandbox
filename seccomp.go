@@ -111,7 +111,7 @@ func ioctlNotifRecv(fd int, cancelFd int) (*notif, error) {
 	return (*notif)(unsafe.Pointer(&buf[0])), nil
 }
 
-func readMemory(fd int, ntf *notif, addr, size uintptr) ([]byte, error) {
+func readMemory(fd int, ntf *notif, addr, size uint64) ([]byte, error) {
 	f, err := os.OpenFile(fmt.Sprintf("/proc/%d/mem", ntf.pid), os.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func readMemory(fd int, ntf *notif, addr, size uintptr) ([]byte, error) {
 	return buf, nil
 }
 
-func readString(fd int, ntf *notif, addr, size uintptr) (string, error) {
+func readString(fd int, ntf *notif, addr, size uint64) (string, error) {
 	buf, err := readMemory(fd, ntf, addr, size)
 	if err != nil {
 		return "", err
@@ -155,7 +155,7 @@ func readString(fd int, ntf *notif, addr, size uintptr) (string, error) {
 	return "", errors.New("string not NUL terminated")
 }
 
-func readStringSlice(fd int, ntf *notif, addr, size uintptr) ([]string, error) {
+func readStringSlice(fd int, ntf *notif, addr, size uint64) ([]string, error) {
 	if addr == 0 {
 		return nil, nil
 	}
@@ -174,7 +174,7 @@ func readStringSlice(fd int, ntf *notif, addr, size uintptr) ([]string, error) {
 		}
 		buf = buf[ps:]
 
-		s, err := readString(fd, ntf, uintptr(p), size)
+		s, err := readString(fd, ntf, p, size)
 		if err != nil {
 			return nil, err
 		}
