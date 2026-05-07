@@ -3,10 +3,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
-
 	"golang.org/x/sys/unix"
 )
 
@@ -23,25 +19,8 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPEN:
-		pathname, err := readString(fd, ntf, ntf.data.args[0], 2048)
-		if err != nil {
-			fmt.Printf("open: read string: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		if !filepath.IsAbs(pathname) {
-			cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
-			if err != nil {
-				fmt.Printf("open: resolve cwd: %s\n", err)
-				return 0, -int32(unix.EACCES)
-			}
-			pathname = filepath.Join(cwd, pathname)
-		}
-		if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[1]),
-			uint32(ntf.data.args[2])) {
-
-			return 0, continueSyscall
-		}
-		return 0, -int32(unix.EACCES)
+		return handleOpen(fd, ntf, h, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
+			ntf.data.args[2], 0)
 
 	default:
 		if h.Syscall(ntf.pid, int(ntf.data.nr)) {

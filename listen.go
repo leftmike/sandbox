@@ -175,53 +175,10 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPENAT:
-		pathname, err := readString(fd, ntf, ntf.data.args[1], 2048)
-		if err != nil {
-			fmt.Printf("openat: read string: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		if !filepath.IsAbs(pathname) {
-			dirfd := int32(ntf.data.args[0])
-			var dir string
-			if dirfd == unix.AT_FDCWD {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
-			} else {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
-			}
-			if err != nil {
-				fmt.Printf("openat: resolve dirfd: %s\n", err)
-				return 0, -int32(unix.EACCES)
-			}
-			pathname = filepath.Join(dir, pathname)
-		}
-		if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(ntf.data.args[2]),
-			uint32(ntf.data.args[3])) {
-
-			return 0, continueSyscall
-		}
-		return 0, -int32(unix.EACCES)
+		return handleOpen(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], ntf.data.args[2],
+			ntf.data.args[3], 0)
 
 	case unix.SYS_OPENAT2:
-		pathname, err := readString(fd, ntf, ntf.data.args[1], 2048)
-		if err != nil {
-			fmt.Printf("openat2: read pathname: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		if !filepath.IsAbs(pathname) {
-			dirfd := int32(ntf.data.args[0])
-			var dir string
-			if dirfd == unix.AT_FDCWD {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
-			} else {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
-			}
-			if err != nil {
-				fmt.Printf("openat2: resolve dirfd: %s\n", err)
-				return 0, -int32(unix.EACCES)
-			}
-			pathname = filepath.Join(dir, pathname)
-		}
-
 		var oh openHow
 		buf, err := readMemory(fd, ntf, ntf.data.args[2], uint64(unsafe.Sizeof(oh)))
 		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
@@ -229,14 +186,41 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 			return 0, -int32(unix.EACCES)
 		}
 		oh = *(*openHow)(unsafe.Pointer(&buf[0]))
-		if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(oh.flags), uint32(oh.mode)) {
-			return 0, continueSyscall
-		}
-		return 0, -int32(unix.EACCES)
+
+		return handleOpen(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], oh.flags,
+			oh.mode, oh.resolve)
 
 	default:
 		return handleNotifArch(fd, ntf, h)
 	}
+}
+
+func handleOpen(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
+	resolve uint64) (int64, int32) {
+
+	pathname, err := readString(fd, ntf, path, 2048)
+	if err != nil {
+		fmt.Printf("%s: read string: %s\n", Sysnums[ntf.data.nr], err)
+		return 0, -int32(unix.EACCES)
+	}
+	if !filepath.IsAbs(pathname) {
+		var dir string
+		if dirfd == unix.AT_FDCWD {
+			dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
+		} else {
+			dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
+		}
+		if err != nil {
+			fmt.Printf("%s: resolve dirfd: %s\n", Sysnums[ntf.data.nr], err)
+			return 0, -int32(unix.EACCES)
+		}
+		pathname = filepath.Join(dir, pathname)
+	}
+	if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(flags), uint32(mode)) {
+		// XXX: handle openat2 differently than openat and open
+		return 0, continueSyscall
+	}
+	return 0, -int32(unix.EACCES)
 }
 
 func init() {
