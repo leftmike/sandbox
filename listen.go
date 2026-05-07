@@ -109,70 +109,12 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_EXECVE:
-		pathname, err := readString(fd, ntf, ntf.data.args[0], 2048)
-		if err != nil {
-			fmt.Printf("execve: read pathname: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		argv, err := readStringSlice(fd, ntf, ntf.data.args[1], 4096)
-		if err != nil {
-			fmt.Printf("execve: read argv: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		env, err := readStringSlice(fd, ntf, ntf.data.args[2], 4096)
-		if err != nil {
-			fmt.Printf("execve: read env: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		if h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, env) {
-			return 0, continueSyscall
-		}
-		return 0, -int32(unix.EACCES)
+		return handleExecvat(fd, ntf, h, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
+			ntf.data.args[2], 0)
 
 	case unix.SYS_EXECVEAT:
-		dirfd := int32(ntf.data.args[0])
-		var pathname string
-		var err error
-		if ntf.data.args[4]&unix.AT_EMPTY_PATH != 0 {
-			pathname, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
-			if err != nil {
-				fmt.Printf("execveat: resolve dirfd (AT_EMPTY_PATH): %s\n", err)
-				return 0, -int32(unix.EACCES)
-			}
-		} else {
-			pathname, err = readString(fd, ntf, ntf.data.args[1], 2048)
-			if err != nil {
-				fmt.Printf("execveat: read pathname: %s\n", err)
-				return 0, -int32(unix.EACCES)
-			}
-			if !filepath.IsAbs(pathname) {
-				var dir string
-				if dirfd == unix.AT_FDCWD {
-					dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
-				} else {
-					dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
-				}
-				if err != nil {
-					fmt.Printf("execveat: resolve dirfd: %s\n", err)
-					return 0, -int32(unix.EACCES)
-				}
-				pathname = filepath.Join(dir, pathname)
-			}
-		}
-		argv, err := readStringSlice(fd, ntf, ntf.data.args[2], 4096)
-		if err != nil {
-			fmt.Printf("execveat: read argv: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		env, err := readStringSlice(fd, ntf, ntf.data.args[3], 4096)
-		if err != nil {
-			fmt.Printf("execveat: read env: %s\n", err)
-			return 0, -int32(unix.EACCES)
-		}
-		if h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, env) {
-			return 0, continueSyscall
-		}
-		return 0, -int32(unix.EACCES)
+		return handleExecvat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1],
+			ntf.data.args[2], ntf.data.args[3], ntf.data.args[4])
 
 	case unix.SYS_OPENAT:
 		return handleOpen(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], ntf.data.args[2],
@@ -218,6 +160,53 @@ func handleOpen(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 	}
 	if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(flags), uint32(mode)) {
 		// XXX: handle openat2 differently than openat and open
+		return 0, continueSyscall
+	}
+	return 0, -int32(unix.EACCES)
+}
+
+func handleExecvat(fd int, ntf *notif, h Handler, dirfd int32, path, args, env,
+	flags uint64) (int64, int32) {
+
+	var pathname string
+	var err error
+	if flags&unix.AT_EMPTY_PATH != 0 {
+		pathname, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
+		if err != nil {
+			fmt.Printf("%s: resolve dirfd (AT_EMPTY_PATH): %s\n", Sysnums[ntf.data.nr], err)
+			return 0, -int32(unix.EACCES)
+		}
+	} else {
+		pathname, err = readString(fd, ntf, path, 2048)
+		if err != nil {
+			fmt.Printf("%s: read pathname: %s\n", Sysnums[ntf.data.nr], err)
+			return 0, -int32(unix.EACCES)
+		}
+		if !filepath.IsAbs(pathname) {
+			var dir string
+			if dirfd == unix.AT_FDCWD {
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
+			} else {
+				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
+			}
+			if err != nil {
+				fmt.Printf("%s: resolve dirfd: %s\n", Sysnums[ntf.data.nr], err)
+				return 0, -int32(unix.EACCES)
+			}
+			pathname = filepath.Join(dir, pathname)
+		}
+	}
+	argv, err := readStringSlice(fd, ntf, args, 4096)
+	if err != nil {
+		fmt.Printf("%s: read argv: %s\n", Sysnums[ntf.data.nr], err)
+		return 0, -int32(unix.EACCES)
+	}
+	envp, err := readStringSlice(fd, ntf, env, 4096)
+	if err != nil {
+		fmt.Printf("%s: read envp: %s\n", Sysnums[ntf.data.nr], err)
+		return 0, -int32(unix.EACCES)
+	}
+	if h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, envp) {
 		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)
