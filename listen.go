@@ -79,12 +79,6 @@ func listenNotif(fd int, cancelFd int, h Handler) error {
 	}
 }
 
-type openHow struct {
-	flags   uint64
-	mode    uint64
-	resolve uint64
-}
-
 func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
