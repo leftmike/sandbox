@@ -203,9 +203,6 @@ func ioctlNotifAddfd(fd int, addfd notifAddfd) (int, unix.Errno) {
 	cfd, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ADDFD,
 		uintptr(unsafe.Pointer(&addfd)))
 	if errno != 0 {
-		if errno == unix.ENOENT {
-			return -1, 0 // Child died.
-		}
 		return -1, errno
 	}
 	return int(cfd), 0

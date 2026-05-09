@@ -213,8 +213,6 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 	cfd, errno := ioctlNotifAddfd(fd, addfd)
 	if errno != 0 {
 		return 0, -int32(errno)
-	} else if cfd < 0 {
-		return 0, 0
 	}
 
 	return int64(cfd), 0
