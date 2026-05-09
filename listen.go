@@ -121,16 +121,16 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 			ntf.data.args[2], ntf.data.args[3], 0)
 
 	case unix.SYS_OPENAT2:
-		var oh openHow
+		var oh unix.OpenHow
 		buf, err := readMemory(fd, ntf, ntf.data.args[2], uint64(unsafe.Sizeof(oh)))
 		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
 			fmt.Printf("openat2: read open_how: %s\n", err)
 			return 0, -int32(unix.EACCES)
 		}
-		oh = *(*openHow)(unsafe.Pointer(&buf[0]))
+		oh = *(*unix.OpenHow)(unsafe.Pointer(&buf[0]))
 
-		return handleOpenat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], oh.flags,
-			oh.mode, oh.resolve)
+		return handleOpenat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], oh.Flags,
+			oh.Mode, oh.Resolve)
 
 	default:
 		return handleNotifArch(fd, ntf, h)
