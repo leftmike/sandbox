@@ -191,25 +191,22 @@ func ioctlNotifSend(fd int, rsp notifResp) error {
 	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_SEND,
 		uintptr(unsafe.Pointer(&buf[0])))
 	if errno != 0 {
-		// ENOENT: child died between recv and send
 		if errors.Is(errno, unix.ENOENT) {
-			return nil
+			return nil // Child died.
 		}
 		return errno
 	}
 	return nil
 }
 
-func ioctlNotifAddfd(fd int, addfd notifAddfd) error {
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ADDFD,
+func ioctlNotifAddfd(fd int, addfd notifAddfd) (int, unix.Errno) {
+	cfd, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ADDFD,
 		uintptr(unsafe.Pointer(&addfd)))
 	if errno != 0 {
-		// ENOENT: child died between recv and send
-		if errors.Is(errno, unix.ENOENT) {
-			return nil
+		if errno == unix.ENOENT {
+			return -1, 0 // Child died.
 		}
-		return errno
+		return -1, errno
 	}
-	return nil
-
+	return int(cfd), 0
 }

@@ -137,16 +137,15 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 	}
 }
 
-func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
-	resolve uint64) (int64, int32) {
-
+func handlePath(fd int, ntf *notif, dirfd int32, path uint64) (string, string, bool) {
 	pathname, err := readString(fd, ntf, path, 2048)
 	if err != nil {
 		fmt.Printf("%s: read string: %s\n", Sysnums[ntf.data.nr], err)
-		return 0, -int32(unix.EACCES)
+		return "", "", false
 	}
+
+	var dir string
 	if !filepath.IsAbs(pathname) {
-		var dir string
 		if dirfd == unix.AT_FDCWD {
 			dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
 		} else {
@@ -154,11 +153,24 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 		}
 		if err != nil {
 			fmt.Printf("%s: resolve dirfd: %s\n", Sysnums[ntf.data.nr], err)
-			return 0, -int32(unix.EACCES)
+			return "", "", false
 		}
-		pathname = filepath.Join(dir, pathname)
 	}
-	if h.Open(ntf.pid, int(ntf.data.nr), pathname, int32(flags), uint32(mode)) {
+
+	return dir, pathname, true
+}
+
+func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
+	resolve uint64) (int64, int32) {
+
+	dir, pathname, ok := handlePath(fd, ntf, dirfd, path)
+	if !ok {
+		return 0, -int32(unix.EACCES)
+	}
+
+	if h.Open(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), int32(flags),
+		uint32(mode)) {
+
 		// XXX: handle openat2 differently than openat and open
 		return 0, continueSyscall
 	}
@@ -168,45 +180,35 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 func handleExecvat(fd int, ntf *notif, h Handler, dirfd int32, path, args, env,
 	flags uint64) (int64, int32) {
 
-	var pathname string
-	var err error
+	var dir, pathname string
 	if flags&unix.AT_EMPTY_PATH != 0 {
+		var err error
 		pathname, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
 		if err != nil {
 			fmt.Printf("%s: resolve dirfd (AT_EMPTY_PATH): %s\n", Sysnums[ntf.data.nr], err)
 			return 0, -int32(unix.EACCES)
 		}
 	} else {
-		pathname, err = readString(fd, ntf, path, 2048)
-		if err != nil {
-			fmt.Printf("%s: read pathname: %s\n", Sysnums[ntf.data.nr], err)
+		var ok bool
+		dir, pathname, ok = handlePath(fd, ntf, dirfd, path)
+		if !ok {
 			return 0, -int32(unix.EACCES)
 		}
-		if !filepath.IsAbs(pathname) {
-			var dir string
-			if dirfd == unix.AT_FDCWD {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/cwd", ntf.pid))
-			} else {
-				dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
-			}
-			if err != nil {
-				fmt.Printf("%s: resolve dirfd: %s\n", Sysnums[ntf.data.nr], err)
-				return 0, -int32(unix.EACCES)
-			}
-			pathname = filepath.Join(dir, pathname)
-		}
 	}
+
 	argv, err := readStringSlice(fd, ntf, args, 4096)
 	if err != nil {
 		fmt.Printf("%s: read argv: %s\n", Sysnums[ntf.data.nr], err)
 		return 0, -int32(unix.EACCES)
 	}
+
 	envp, err := readStringSlice(fd, ntf, env, 4096)
 	if err != nil {
 		fmt.Printf("%s: read envp: %s\n", Sysnums[ntf.data.nr], err)
 		return 0, -int32(unix.EACCES)
 	}
-	if h.Exec(ntf.pid, int(ntf.data.nr), pathname, argv, envp) {
+
+	if h.Exec(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), argv, envp) {
 		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)
