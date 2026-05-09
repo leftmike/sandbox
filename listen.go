@@ -176,8 +176,54 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 		return 0, -int32(unix.EACCES)
 	}
 
-	// XXX: handle openat2 differently than openat and open
-	return 0, continueSyscall
+	dfd := int(-1)
+	if !filepath.IsAbs(pathname) {
+		var err error
+		dfd, err = unix.Open(dir, unix.O_PATH|unix.O_DIRECTORY, 0)
+		if err != nil {
+			if errno, ok := err.(unix.Errno); ok {
+				return 0, -int32(errno)
+			}
+			return 0, -int32(unix.EACCES)
+		}
+
+		defer unix.Close(dfd)
+	}
+
+	var err error
+	var sfd int
+	if ntf.data.nr == unix.SYS_OPENAT2 {
+		sfd, err = unix.Openat2(dfd, pathname, &unix.OpenHow{
+			Flags:   flags,
+			Mode:    mode,
+			Resolve: resolve,
+		})
+	} else {
+		sfd, err = unix.Openat(dfd, pathname, int(flags), uint32(mode))
+	}
+	if err != nil {
+		if errno, ok := err.(unix.Errno); ok {
+			return 0, -int32(errno)
+		}
+		return 0, -int32(unix.EACCES)
+	}
+	defer unix.Close(sfd)
+
+	addfd := notifAddfd{
+		id:    ntf.id,
+		srcfd: uint32(sfd),
+	}
+	if flags&unix.O_CLOEXEC != 0 {
+		addfd.newfdFlags = unix.O_CLOEXEC
+	}
+	cfd, errno := ioctlNotifAddfd(fd, addfd)
+	if errno != 0 {
+		return 0, -int32(errno)
+	} else if cfd < 0 {
+		return 0, 0
+	}
+
+	return int64(cfd), 0
 }
 
 func handleExecvat(fd int, ntf *notif, h Handler, dirfd int32, path, args, env,
