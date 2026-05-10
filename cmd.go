@@ -26,8 +26,15 @@ type Cmd struct {
 	AllowedExecs []string // if non-nil, only these absolute paths may be executed
 	BindMounts   []string // additional paths to bind-mount into the sandbox root
 
-	closeFd int
-	waitCh  chan error
+	// DynamicAllowedExecs lets the Handler decide allow/deny on each execve at
+	// runtime; the listener bind-mounts the executable into the sandbox root on
+	// allow, before the kernel resumes the syscall.  AllowedExecs is then ignored
+	// as a static allowlist (Handler.Exec is the source of truth).
+	DynamicAllowedExecs bool
+
+	closeFd     int
+	waitCh      chan error
+	mountWorker *mountWorker
 }
 
 func Command(name string, arg ...string) *Cmd {
@@ -121,31 +128,56 @@ func (cmd *Cmd) Start() (err error) {
 
 	cf := os.NewFile(uintptr(sp[1]), "child")
 
+	// In dynamic mode the child forks a mount helper that lives in the new
+	// namespaces and serves bind-mount requests over a SOCK_SEQPACKET socket.
+	// The parent keeps mountSp[0]; mountSp[1] is passed to the sandbox child
+	// (which forwards it on to the helper via fork+exec).
+	var mountSp [2]int = [2]int{-1, -1}
+	var mountCF *os.File
+	if cmd.DynamicAllowedExecs {
+		mountSp, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			if err != nil && mountSp[0] >= 0 {
+				unix.Close(mountSp[0])
+			}
+		}()
+		mountCF = os.NewFile(uintptr(mountSp[1]), "mount-helper-pass")
+	}
+
 	if cmd.Env == nil {
 		cmd.Env = os.Environ()
 	}
 
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
-		Path:         cmd.Path,
-		Args:         cmd.Args,
-		Env:          cmd.Env,
-		Filter:       defaultSockFilter,
-		AllowedExecs: cmd.AllowedExecs,
-		BindMounts:   cmd.BindMounts,
+		Path:                cmd.Path,
+		Args:                cmd.Args,
+		Env:                 cmd.Env,
+		Filter:              defaultSockFilter,
+		AllowedExecs:        cmd.AllowedExecs,
+		BindMounts:          cmd.BindMounts,
+		DynamicAllowedExecs: cmd.DynamicAllowedExecs,
 	}
 
 	cmd.Path = path
 	cmd.Args = []string{"__sandbox_child"}
 	cmd.ExtraFiles = []*os.File{cf}
+	if mountCF != nil {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, mountCF)
+	}
 
-	// When AllowedExecs is set, fork the child directly into new user+mount namespaces.
-	// The Go runtime is multi-threaded, so unshare(CLONE_NEWUSER) from within the child
-	// would fail with EINVAL; using Cloneflags on the fork avoids that limitation.
-	// UidMappings/GidMappings are written by Go's runtime immediately after the fork,
-	// before exec(), so the child has the correct capability set when it starts.
+	// When AllowedExecs is set or dynamic mode is on, fork the child directly into
+	// new user+mount namespaces.  The Go runtime is multi-threaded so
+	// unshare(CLONE_NEWUSER) from within the child would fail with EINVAL; using
+	// Cloneflags on the fork avoids that limitation.  UidMappings/GidMappings are
+	// written by Go's runtime immediately after the fork, before exec(), so the
+	// child has the correct capability set when it starts.
+	needNS := len(cmd.AllowedExecs) > 0 || cmd.DynamicAllowedExecs
 	attr := &syscall.SysProcAttr{Setpgid: true}
-	if len(cmd.AllowedExecs) > 0 {
+	if needNS {
 		uid := os.Getuid()
 		gid := os.Getgid()
 		attr.Cloneflags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS
@@ -156,8 +188,16 @@ func (cmd *Cmd) Start() (err error) {
 
 	err = cmd.Cmd.Start()
 	cf.Close()
+	if mountCF != nil {
+		mountCF.Close()
+	}
 	if err != nil {
 		return err
+	}
+
+	if cmd.DynamicAllowedExecs {
+		cmd.mountWorker = newMountWorker(mountSp[0])
+		mountSp[0] = -1 // ownership transferred
 	}
 
 	err = sendConfig(sp[0], &cfg)
@@ -172,13 +212,16 @@ func (cmd *Cmd) Start() (err error) {
 
 	cmd.waitCh = make(chan error, 2)
 	go func() {
-		err := listenNotif(fd, pipe[0], cmd.Handler, cmd.AllowedExecs)
+		err := listenNotif(fd, pipe[0], cmd.Handler, cmd.AllowedExecs, cmd.mountWorker)
 		if err != nil {
 			cmd.waitCh <- err
 		}
 
 		unix.Close(fd)
 		unix.Close(pipe[0])
+		if cmd.mountWorker != nil {
+			cmd.mountWorker.Stop()
+		}
 	}()
 
 	go func() {

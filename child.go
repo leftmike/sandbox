@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	childSocketFd = 3
+	childSocketFd      = 3
+	childMountHelperFd = 4
 
 	// Failure error codes from the sandbox child.
 	childBadArguments      = 189
@@ -22,15 +23,17 @@ const (
 	childExecCommandFailed = 194
 	childMountFailed       = 197
 	childPivotRootFailed   = 198
+	childMountHelperFailed = 199
 )
 
 type childConfig struct {
-	Path         string
-	Args         []string
-	Env          []string
-	Filter       []unix.SockFilter
-	AllowedExecs []string // if non-nil, restrict execution to these absolute paths
-	BindMounts   []string // additional paths to bind-mount read-only into the new root
+	Path                string
+	Args                []string
+	Env                 []string
+	Filter              []unix.SockFilter
+	AllowedExecs        []string // if non-nil, restrict execution to these absolute paths
+	BindMounts          []string // additional paths to bind-mount read-only into the new root
+	DynamicAllowedExecs bool     // listener bind-mounts on demand; AllowedExecs may be empty
 }
 
 func recvConfig(fd int) (*childConfig, error) {
@@ -81,6 +84,11 @@ func isSocketFd(fd int) bool {
 }
 
 func init() {
+	if os.Args[0] == "__sandbox_mount_helper" {
+		runtime.LockOSThread()
+		runMountHelper()
+		os.Exit(0)
+	}
 	if os.Args[0] != "__sandbox_child" {
 		return
 	}
@@ -106,8 +114,18 @@ func init() {
 
 	// Mount namespace setup must happen before PR_SET_NO_NEW_PRIVS: Linux blocks
 	// unprivileged user namespace creation once no_new_privs is set.
-	if cfg.AllowedExecs != nil {
+	if cfg.AllowedExecs != nil || cfg.DynamicAllowedExecs {
 		setupMountNS(cfg)
+	}
+
+	// Spawn the mount helper while we still have CAP_SYS_ADMIN in the new user
+	// namespace and before the seccomp filter is installed (otherwise the helper
+	// would inherit the filter and trip on its own mount() calls).
+	if cfg.DynamicAllowedExecs {
+		if err := startMountHelper(childMountHelperFd); err != nil {
+			fmt.Fprintf(os.Stderr, "sandbox child: start mount helper: %s\n", err)
+			os.Exit(childMountHelperFailed)
+		}
 	}
 
 	err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)

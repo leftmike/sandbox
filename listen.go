@@ -51,14 +51,16 @@ func sendConfig(fd int, cfg *childConfig) error {
 	return unix.Sendmsg(fd, buf, nil, nil, 0)
 }
 
-func listenNotif(fd int, cancelFd int, h Handler, allowedExecs []string) error {
+func listenNotif(fd int, cancelFd int, h Handler, allowedExecs []string,
+	w *mountWorker) error {
+
 	for {
 		ntf, err := ioctlNotifRecv(fd, cancelFd)
 		if err != nil || ntf == nil {
 			return err
 		}
 
-		val, errno := handleNotif(fd, ntf, h, allowedExecs)
+		val, errno := handleNotif(fd, ntf, h, allowedExecs, w)
 
 		rsp := notifResp{id: ntf.id}
 		if errno > 0 {
@@ -93,7 +95,9 @@ func execAllowed(pathname string, allowedExecs []string) bool {
 	return false
 }
 
-func handleNotif(fd int, ntf *notif, h Handler, allowedExecs []string) (int64, int32) {
+func handleNotif(fd int, ntf *notif, h Handler, allowedExecs []string,
+	w *mountWorker) (int64, int32) {
+
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
 		if h.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0]) {
@@ -117,11 +121,11 @@ func handleNotif(fd int, ntf *notif, h Handler, allowedExecs []string) (int64, i
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_EXECVE:
-		return handleExecvat(fd, ntf, h, allowedExecs, unix.AT_FDCWD, ntf.data.args[0],
-			ntf.data.args[1], ntf.data.args[2], 0)
+		return handleExecvat(fd, ntf, h, allowedExecs, w, unix.AT_FDCWD,
+			ntf.data.args[0], ntf.data.args[1], ntf.data.args[2], 0)
 
 	case unix.SYS_EXECVEAT:
-		return handleExecvat(fd, ntf, h, allowedExecs, int32(ntf.data.args[0]),
+		return handleExecvat(fd, ntf, h, allowedExecs, w, int32(ntf.data.args[0]),
 			ntf.data.args[1], ntf.data.args[2], ntf.data.args[3], ntf.data.args[4])
 
 	case unix.SYS_OPENAT:
@@ -232,8 +236,8 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 	return int64(cfd), 0
 }
 
-func handleExecvat(fd int, ntf *notif, h Handler, allowedExecs []string, dirfd int32,
-	path, args, env, flags uint64) (int64, int32) {
+func handleExecvat(fd int, ntf *notif, h Handler, allowedExecs []string, w *mountWorker,
+	dirfd int32, path, args, env, flags uint64) (int64, int32) {
 
 	var dir, pathname string
 	if flags&unix.AT_EMPTY_PATH != 0 {
@@ -252,7 +256,10 @@ func handleExecvat(fd int, ntf *notif, h Handler, allowedExecs []string, dirfd i
 	}
 
 	resolved := filepath.Join(dir, pathname)
-	if !execAllowed(resolved, allowedExecs) {
+
+	// Static allowlist pre-check (skipped in dynamic mode where the handler
+	// is the source of truth).
+	if w == nil && !execAllowed(resolved, allowedExecs) {
 		return 0, -int32(unix.EACCES)
 	}
 
@@ -268,10 +275,18 @@ func handleExecvat(fd int, ntf *notif, h Handler, allowedExecs []string, dirfd i
 		return 0, -int32(unix.EACCES)
 	}
 
-	if h.Exec(ntf.pid, int(ntf.data.nr), resolved, argv, envp) {
-		return 0, continueSyscall
+	if !h.Exec(ntf.pid, int(ntf.data.nr), resolved, argv, envp) {
+		return 0, -int32(unix.EACCES)
 	}
-	return 0, -int32(unix.EACCES)
+
+	if w != nil {
+		if err := w.BindMount(resolved, resolved); err != nil {
+			fmt.Printf("%s: bind mount %s: %s\n", Sysnums[ntf.data.nr], resolved, err)
+			return 0, -int32(unix.EACCES)
+		}
+	}
+
+	return 0, continueSyscall
 }
 
 func init() {

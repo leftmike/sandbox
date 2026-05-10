@@ -3,12 +3,22 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 
 	"golang.org/x/sys/unix"
 )
+
+// hostRootMountpoint is the path inside the sandbox where the host's root
+// filesystem is bind-mounted (read-only) when DynamicAllowedExecs is on.
+// The mount helper uses this path to resolve host paths from within the
+// sandbox's mount namespace.
+const hostRootMountpoint = "/run/.host"
 
 // defaultBindMounts contains paths bind-mounted read-only into the new root to satisfy
 // the dynamic linker and libc requirements for typical glibc-linked binaries.
@@ -84,6 +94,38 @@ func setupMountNS(cfg *childConfig) {
 		os.Exit(childMountFailed)
 	}
 
+	// In dynamic mode the helper needs to resolve host paths from inside the
+	// sandbox namespace.  We can't bind-mount / directly (the kernel rejects bind
+	// mounts of the root mount with EINVAL in unprivileged user namespaces), so
+	// we mirror each top-level entry of / individually under hostRootMountpoint.
+	// MS_BIND (without MS_REC) deliberately omits submounts of / (e.g. /proc,
+	// /tmp, /dev, /sys); the helper only needs read access to the regular file
+	// hierarchy.  This still exposes host filenames to the sandboxed process;
+	// the seccomp listener remains the authoritative gate on what may execute.
+	if cfg.DynamicAllowedExecs {
+		hostRoot := filepath.Join(stagingDir, hostRootMountpoint)
+		if err := os.MkdirAll(hostRoot, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "sandbox child: mkdir host root mirror: %s\n", err)
+			os.Exit(childMountFailed)
+		}
+		entries, err := os.ReadDir("/")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sandbox child: readdir /: %s\n", err)
+			os.Exit(childMountFailed)
+		}
+		for _, ent := range entries {
+			name := ent.Name()
+			// Skip pseudo-filesystems we don't need or that aren't bind-mountable.
+			switch name {
+			case "proc", "sys", "dev", "tmp", "run":
+				continue
+			}
+			src := "/" + name
+			dst := filepath.Join(hostRoot, name)
+			_ = bindMountRO(src, dst)
+		}
+	}
+
 	// pivot_root using the "same directory" trick: chdir into the new root,
 	// call pivot_root(".", ".") to replace old root with cwd, then detach old root.
 	if err := unix.Chdir(stagingDir); err != nil {
@@ -144,4 +186,113 @@ func bindMount(src, dst string) error {
 		return err
 	}
 	return unix.Mount(src, dst, "", unix.MS_BIND|unix.MS_REC, "")
+}
+
+// mountWorker is the parent-side handle to the in-namespace mount helper process.
+// Each BindMount call sends a textual request over a SOCK_SEQPACKET socket and
+// reads back the helper's response.  Setns from the parent doesn't work in Go
+// (the runtime is multi-threaded and setns(CLONE_NEWUSER) returns EINVAL), so the
+// actual mount is done by a helper process that the sandbox child forks while it
+// still has CAP_SYS_ADMIN in the new user namespace.
+type mountWorker struct {
+	mu      sync.Mutex
+	fd      int
+	mounted map[string]bool
+}
+
+func newMountWorker(fd int) *mountWorker {
+	return &mountWorker{fd: fd, mounted: map[string]bool{}}
+}
+
+// BindMount asks the helper to bind-mount srcPath (a host-namespace absolute path)
+// onto target (a path inside the sandbox's tmpfs root).  Repeated calls for the
+// same target are no-ops.
+func (w *mountWorker) BindMount(srcPath, target string) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.mounted[target] {
+		return nil
+	}
+	if strings.ContainsAny(srcPath, " \n") || strings.ContainsAny(target, " \n") {
+		return fmt.Errorf("mount paths must not contain space or newline: %q %q", srcPath, target)
+	}
+
+	req := []byte(fmt.Sprintf("MOUNT %s %s", srcPath, target))
+	if _, err := unix.Write(w.fd, req); err != nil {
+		return fmt.Errorf("mount worker write: %w", err)
+	}
+
+	buf := make([]byte, 4096)
+	n, err := unix.Read(w.fd, buf)
+	if err != nil {
+		return fmt.Errorf("mount worker read: %w", err)
+	}
+	resp := string(buf[:n])
+	switch {
+	case resp == "OK":
+		w.mounted[target] = true
+		return nil
+	case strings.HasPrefix(resp, "ERR "):
+		return errors.New(strings.TrimPrefix(resp, "ERR "))
+	default:
+		return fmt.Errorf("mount worker: unexpected response %q", resp)
+	}
+}
+
+// Stop closes the socket; the helper process sees EOF and exits.
+func (w *mountWorker) Stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.fd >= 0 {
+		unix.Close(w.fd)
+		w.fd = -1
+	}
+}
+
+// runMountHelper is the entry point for the "__sandbox_mount_helper" subprocess.
+// It is forked from the sandbox child after setupMountNS but before installListener,
+// so it inherits the new user+mount namespaces and has CAP_SYS_ADMIN there.
+// It reads MOUNT requests from fd 3 and replies in place.  Source paths are
+// resolved through hostRootMountpoint inside the sandbox namespace.
+func runMountHelper() {
+	const fd = 3
+	buf := make([]byte, 8192)
+	for {
+		n, err := unix.Read(fd, buf)
+		if err != nil || n == 0 {
+			return
+		}
+		msg := string(buf[:n])
+		parts := strings.SplitN(msg, " ", 3)
+		if len(parts) != 3 || parts[0] != "MOUNT" {
+			_, _ = unix.Write(fd, []byte("ERR bad request"))
+			continue
+		}
+		hostSrc := filepath.Join(hostRootMountpoint, parts[1])
+		target := parts[2]
+		if err := bindMountRO(hostSrc, target); err != nil {
+			_, _ = unix.Write(fd, []byte("ERR "+err.Error()))
+			continue
+		}
+		_, _ = unix.Write(fd, []byte("OK"))
+	}
+}
+
+// startMountHelper is called from the sandbox child to fork the helper subprocess.
+// The helper inherits the sandbox child's namespaces; it receives the helper end
+// of the parent<->helper socket as fd 3 via ExtraFiles.
+func startMountHelper(socketFd int) error {
+	helperFile := os.NewFile(uintptr(socketFd), "mount-helper-sock")
+	defer helperFile.Close()
+
+	cmd := exec.Cmd{
+		Path:       "/proc/self/exe",
+		Args:       []string{"__sandbox_mount_helper"},
+		Stdin:      nil,
+		Stdout:     nil,
+		Stderr:     os.Stderr,
+		ExtraFiles: []*os.File{helperFile},
+	}
+	return cmd.Start()
 }
