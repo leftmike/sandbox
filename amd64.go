@@ -32,18 +32,10 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 }
 
 var (
-	archSockFilter = []unix.SockFilter{
-		// fork
-		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_FORK, Jt: 0, Jf: 1},
-		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
-
-		// open
-		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_OPEN, Jt: 0, Jf: 1},
-		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
-
-		// vfork
-		{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: unix.SYS_VFORK, Jt: 0, Jf: 1},
-		{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_USER_NOTIF},
+	archSyscallConfig = []SyscallConfig{
+		{Syscall: unix.SYS_FORK, Action: unix.SECCOMP_RET_USER_NOTIF},
+		{Syscall: unix.SYS_OPEN, Action: unix.SECCOMP_RET_USER_NOTIF},
+		{Syscall: unix.SYS_VFORK, Action: unix.SECCOMP_RET_USER_NOTIF},
 	}
 
 	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_amd64.go

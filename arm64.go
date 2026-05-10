@@ -18,7 +18,7 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 }
 
 var (
-	archSockFilter = []unix.SockFilter{}
+	archSyscallConfig = []SyscallConfig{}
 
 	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_arm64.go
 	Sysnums = []string{
