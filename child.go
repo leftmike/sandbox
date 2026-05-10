@@ -20,13 +20,17 @@ const (
 	childSendmsgFailed     = 192
 	childRecvConfigFailed  = 193
 	childExecCommandFailed = 194
+	childMountFailed       = 197
+	childPivotRootFailed   = 198
 )
 
 type childConfig struct {
-	Path   string
-	Args   []string
-	Env    []string
-	Filter []unix.SockFilter
+	Path         string
+	Args         []string
+	Env          []string
+	Filter       []unix.SockFilter
+	AllowedExecs []string // if non-nil, restrict execution to these absolute paths
+	BindMounts   []string // additional paths to bind-mount read-only into the new root
 }
 
 func recvConfig(fd int) (*childConfig, error) {
@@ -94,16 +98,22 @@ func init() {
 		os.Exit(childBadArguments)
 	}
 
-	err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
-		os.Exit(childNoNewPrivsFailed)
-	}
-
 	cfg, err := recvConfig(childSocketFd)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: recv config: %s\n", err)
 		os.Exit(childRecvConfigFailed)
+	}
+
+	// Mount namespace setup must happen before PR_SET_NO_NEW_PRIVS: Linux blocks
+	// unprivileged user namespace creation once no_new_privs is set.
+	if cfg.AllowedExecs != nil {
+		setupMountNS(cfg)
+	}
+
+	err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
+		os.Exit(childNoNewPrivsFailed)
 	}
 
 	fd := installListener(cfg.Filter)
