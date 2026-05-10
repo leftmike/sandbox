@@ -1,10 +1,12 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 type syscallHandler struct{}
@@ -37,23 +39,41 @@ func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {
 }
 
 func main() {
-	if len(os.Args) < 2 {
+	var allowExecFlag multiFlag
+	flag.Var(&allowExecFlag, "allow-exec",
+		"allow execution of this absolute path (may be repeated; activates exec allowlist)")
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 1 {
 		log.Fatalln("missing command to sandbox")
 	}
 
-	fmt.Println(os.Args[1:])
-	cmd := Command(os.Args[1], os.Args[2:]...)
+	fmt.Println(args)
+	cmd := Command(args[0], args[1:]...)
 	cmd.Handler = syscallHandler{}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if len(allowExecFlag) > 0 {
+		cmd.AllowedExecs = []string(allowExecFlag)
+	}
 
 	err := cmd.Run()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[1], err)
+		fmt.Fprintf(os.Stderr, "%s: %s\n", args[0], err)
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())
 		}
 		os.Exit(1)
 	}
+}
+
+// multiFlag is a repeatable string flag.
+type multiFlag []string
+
+func (f *multiFlag) String() string { return strings.Join(*f, ",") }
+func (f *multiFlag) Set(v string) error {
+	*f = append(*f, v)
+	return nil
 }
