@@ -48,3 +48,36 @@ sandbox --allow-exec=/bin/sh --allow-exec=/usr/bin/env /bin/sh myscript.sh
 ```
 
 Each `--allow-exec` flag adds one absolute path to `AllowedExecs`.
+
+## Dynamic exec control (DynamicAllowedExecs)
+
+Setting `Cmd.DynamicAllowedExecs = true` makes the allowlist runtime-decided: on
+every `execve`/`execveat` notification the listener calls `Handler.Exec`, and if
+the handler returns `true` a mount helper bind-mounts the executable into the
+sandbox's tmpfs root before the kernel resumes the syscall.  `AllowedExecs` is
+ignored as a static gate in this mode (the handler is the sole source of truth).
+
+### How it works
+
+The sandbox child forks an `__sandbox_mount_helper` subprocess after
+`setupMountNS` but before the seccomp filter is installed.  The helper inherits
+the new user+mount namespaces and therefore has `CAP_SYS_ADMIN` to perform
+mounts.  The host filesystem is exposed inside the sandbox at `/run/.host` (each
+top-level entry of `/` is bind-mounted there read-only — `/` itself can't be
+bind-mounted in an unprivileged user namespace).  The helper resolves a request
+for `/bin/echo` as `/run/.host/bin/echo`.  Communication is a textual
+SOCK_SEQPACKET protocol: `MOUNT <src> <target>` ↔ `OK` / `ERR <msg>`.
+
+### Trade-offs
+
+- `/run/.host` is visible to the sandboxed process — it can read host file
+  contents but cannot bypass exec control, since `execve("/run/.host/bin/foo")`
+  hits the seccomp listener with that pathname; the handler should normalise
+  paths or reject the prefix if it cares.
+- `SECCOMP_USER_NOTIF_FLAG_CONTINUE` has a known TOCTOU window where the kernel
+  re-reads syscall arguments after the listener responds.  A multi-threaded
+  tracee with a cooperating peer thread could swap the pathname between
+  resolution and resume.
+- Library dependencies of the freshly-mounted executable still come from the
+  static `defaultBindMounts`; if the binary needs something outside that set
+  (a custom rpath, a private libdir) you must add it to `Cmd.BindMounts`.
