@@ -94,6 +94,11 @@ func (cmd *Cmd) Start() (err error) {
 		panic("sandbox: no handler")
 	}
 
+	path, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
 	var pipe [2]int
 	err = unix.Pipe2(pipe[:], unix.O_CLOEXEC)
 	if err != nil {
@@ -126,7 +131,7 @@ func (cmd *Cmd) Start() (err error) {
 		Filter: defaultSockFilter,
 	}
 
-	cmd.Path = "/proc/self/exe" // XXX: os.Executable()?
+	cmd.Path = path
 	cmd.Args = []string{"__sandbox_child"}
 	cmd.ExtraFiles = []*os.File{cf}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
