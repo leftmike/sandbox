@@ -14,9 +14,10 @@ import (
 )
 
 type testHandler struct {
-	clone   func(pid uint32, sysnum int, flags uint64) bool
-	exec    func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
-	open    func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool
+	clone func(pid uint32, sysnum int, flags uint64) bool
+	exec  func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
+	open  func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+		resolve uint64) bool
 	syscall func(pid uint32, sysnum int) bool
 }
 
@@ -39,10 +40,10 @@ func (th testHandler) Exec(pid uint32, sysnum int, pathname string, argv []strin
 }
 
 func (th testHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
-	mode uint32) bool {
+	mode uint32, resolve uint64) bool {
 
 	if th.open != nil {
-		return th.open(pid, sysnum, pathname, flags, mode)
+		return th.open(pid, sysnum, pathname, flags, mode, resolve)
 	}
 
 	return true
@@ -291,7 +292,9 @@ func TestRunOpen(t *testing.T) {
 	cmd := Command("/bin/cat", f.Name())
 	cmd.Stdout = &buf
 	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
+
 			if pathname == f.Name() {
 				found = true
 			}
@@ -313,7 +316,9 @@ func TestRunOpen(t *testing.T) {
 
 	cmd = Command("/bin/cat", f.Name())
 	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
+
 			if pathname == f.Name() {
 				return false
 			}

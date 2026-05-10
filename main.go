@@ -25,9 +25,9 @@ func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []str
 }
 
 func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
-	mode uint32) bool {
+	mode uint32, resolve uint64) bool {
 
-	fmt.Printf("%d: %s(%s, %x, %x)\n", pid, Sysnums[sysnum], pathname, flags, mode)
+	fmt.Printf("%d: %s(%s, %x, %x, %x)\n", pid, Sysnums[sysnum], pathname, flags, mode, resolve)
 	return true
 }
 

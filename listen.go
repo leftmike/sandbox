@@ -165,7 +165,7 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 	}
 
 	if !h.Open(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), int32(flags),
-		uint32(mode)) {
+		uint32(mode), resolve) {
 
 		return 0, -int32(unix.EACCES)
 	}

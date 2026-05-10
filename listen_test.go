@@ -20,7 +20,9 @@ func TestOpenatAbsolute(t *testing.T) {
 	var found bool
 	cmd := Command("/bin/cat", want)
 	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
+
 			if pathname == want {
 				found = true
 			}
@@ -49,7 +51,9 @@ func TestOpenatATFDCWD(t *testing.T) {
 	cmd := Command("/bin/cat", name)
 	cmd.Dir = dir
 	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
+
 			if pathname == want {
 				found = true
 			}
@@ -94,7 +98,9 @@ os.close(dirfd)
 	var found bool
 	cmd := Command(python, "-c", script, dir, name)
 	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32) bool {
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
+
 			if pathname == want {
 				found = true
 			}
