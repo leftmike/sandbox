@@ -562,6 +562,118 @@ func TestCmdAllowedExecsSubprocess(t *testing.T) {
 	}
 }
 
+func TestCmdDynamicAllowedExecsAllows(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	echoPath, err := exec.LookPath("echo")
+	if err != nil {
+		t.Skip("echo not found")
+	}
+
+	var buf bytes.Buffer
+	var allowed []string
+	cmd := Command(echoPath, "hello")
+	cmd.Stdout = &buf
+	cmd.DynamicAllowedExecs = true
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			allowed = append(allowed, pathname)
+			return true
+		},
+	}
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	if got := strings.TrimSpace(buf.String()); got != "hello" {
+		t.Errorf("stdout: got %q want %q", got, "hello")
+	}
+	if !slices.Contains(allowed, echoPath) {
+		t.Errorf("handler not asked about %s; got %v", echoPath, allowed)
+	}
+}
+
+func TestCmdDynamicAllowedExecsBlocks(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	echoPath, err := exec.LookPath("echo")
+	if err != nil {
+		t.Skip("echo not found")
+	}
+
+	cmd := Command(echoPath, "hello")
+	cmd.DynamicAllowedExecs = true
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			return false
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Fatalf("Run() unexpected error: %v", err)
+	}
+	if ret == 0 {
+		t.Error("Run() should have failed (handler denied), got 0")
+	}
+}
+
+func TestCmdDynamicAllowedExecsSubprocess(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh not found")
+	}
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not found")
+	}
+
+	// Allow sh and true; verify both are asked about and the script runs.
+	allow := map[string]bool{shPath: true, truePath: true}
+	var seen []string
+	cmd := Command(shPath, "-c", truePath)
+	cmd.DynamicAllowedExecs = true
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			seen = append(seen, pathname)
+			return allow[pathname]
+		},
+	}
+
+	ret, err := exitCode(cmd.Run())
+	if err != nil {
+		t.Fatalf("Run() unexpected error: %v", err)
+	}
+	if ret != 0 {
+		t.Errorf("Run() got exit %d, want 0; handler saw %v", ret, seen)
+	}
+	if !slices.Contains(seen, shPath) || !slices.Contains(seen, truePath) {
+		t.Errorf("handler did not see both %s and %s; got %v", shPath, truePath, seen)
+	}
+
+	// Now deny truePath; sh runs but the subprocess exec is blocked.
+	allow = map[string]bool{shPath: true}
+	seen = nil
+	cmd = Command(shPath, "-c", truePath)
+	cmd.DynamicAllowedExecs = true
+	cmd.Handler = testHandler{
+		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			seen = append(seen, pathname)
+			return allow[pathname]
+		},
+	}
+
+	ret, err = exitCode(cmd.Run())
+	if err != nil {
+		t.Fatalf("Run() unexpected error: %v", err)
+	}
+	if ret == 0 {
+		t.Errorf("Run() with %s denied should fail, got 0; handler saw %v", truePath, seen)
+	}
+}
+
 func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := Command("/bin/sh", "-c", "/bin/true")
