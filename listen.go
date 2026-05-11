@@ -261,7 +261,7 @@ func init() {
 			sysnum, ok := syscalls[s]
 			if !ok {
 				panic(fmt.Sprintf("syscalls missing %s", s))
-			} else if sysnum != n {
+			} else if sysnum != uint32(n) {
 				panic(fmt.Sprintf("%s: syscalls: %d; sysnums: %d", s, sysnum, n))
 			}
 		}

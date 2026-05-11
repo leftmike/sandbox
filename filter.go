@@ -7,17 +7,18 @@ package main
 
 import (
 	"fmt"
+	"maps"
 	"syscall"
 
 	"golang.org/x/sys/unix"
 )
 
-type SyscallConfig struct {
-	Syscall uint32
-	Action  uint32
-	Errno   syscall.Errno
+type FilterConfig struct {
+	Action uint32
+	Errno  syscall.Errno
 }
 
+// XXX: fc FilterConfig
 func sockFilterAction(fltr []unix.SockFilter, what string, action uint32,
 	errno syscall.Errno) []unix.SockFilter {
 
@@ -30,7 +31,7 @@ func sockFilterAction(fltr []unix.SockFilter, what string, action uint32,
 	case unix.SECCOMP_RET_ERRNO:
 		return append(fltr, unix.SockFilter{
 			Code: unix.BPF_RET | unix.BPF_K,
-			K:    action | uint32(errno|unix.SECCOMP_RET_DATA),
+			K:    action | uint32(errno&unix.SECCOMP_RET_DATA),
 		})
 
 	default:
@@ -38,7 +39,7 @@ func sockFilterAction(fltr []unix.SockFilter, what string, action uint32,
 	}
 }
 
-func makeSockFilter(args ...[]SyscallConfig) []unix.SockFilter {
+func makeSockFilter(cfg map[string]FilterConfig) []unix.SockFilter {
 	fltr := []unix.SockFilter{
 		// Reject anything that isn't native architecture
 		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 4}, // load seccomp_data.arch
@@ -48,32 +49,39 @@ func makeSockFilter(args ...[]SyscallConfig) []unix.SockFilter {
 		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 0}, // load seccomp_data.nr
 	}
 
-	for _, arg := range args {
-		for _, scfg := range arg {
-			fltr = append(fltr, unix.SockFilter{
-				Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K,
-				K:    scfg.Syscall,
-				Jt:   0,
-				Jf:   1})
-			fltr = sockFilterAction(fltr, Sysnums[scfg.Syscall], scfg.Action, scfg.Errno)
+	for name, fc := range cfg {
+		sc, ok := syscalls[name]
+		if !ok {
+			continue
 		}
+
+		fltr = append(fltr, unix.SockFilter{
+			Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: sc, Jt: 0, Jf: 1})
+		fltr = sockFilterAction(fltr, name, fc.Action, fc.Errno)
 	}
 
 	return append(fltr,
 		unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW})
 }
 
-var (
-	defaultSockFilter = makeSockFilter([]SyscallConfig{
-		{Syscall: unix.SYS_CLONE, Action: unix.SECCOMP_RET_USER_NOTIF},
-		{Syscall: unix.SYS_CLONE3, Action: unix.SECCOMP_RET_USER_NOTIF},
-		{Syscall: unix.SYS_EXECVE, Action: unix.SECCOMP_RET_USER_NOTIF},
-		{Syscall: unix.SYS_EXECVEAT, Action: unix.SECCOMP_RET_USER_NOTIF},
-		{Syscall: unix.SYS_OPENAT, Action: unix.SECCOMP_RET_USER_NOTIF},
-		{Syscall: unix.SYS_OPENAT2, Action: unix.SECCOMP_RET_USER_NOTIF},
+func DefaultFilterConfig() map[string]FilterConfig {
+	return maps.Clone(defaultFilterConfig)
+}
 
-		// open_by_handle_at
+var (
+	defaultFilterConfig = map[string]FilterConfig{
+		"clone":    {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"clone3":   {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"execve":   {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"execveat": {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"fork":     {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"open":     {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"openat":   {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"openat2":  {Action: unix.SECCOMP_RET_USER_NOTIF},
 		// No pathname is available from the file handle; deny unconditionally.
-		{Syscall: unix.SYS_OPEN_BY_HANDLE_AT, Action: unix.SECCOMP_RET_KILL_PROCESS},
-	}, archSyscallConfig)
+		"open_by_handle_at": {Action: unix.SECCOMP_RET_KILL_PROCESS},
+		"vfork":             {Action: unix.SECCOMP_RET_USER_NOTIF},
+	}
+
+	defaultSockFilter = makeSockFilter(defaultFilterConfig)
 )

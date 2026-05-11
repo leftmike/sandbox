@@ -32,12 +32,6 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 }
 
 var (
-	archSyscallConfig = []SyscallConfig{
-		{Syscall: unix.SYS_FORK, Action: unix.SECCOMP_RET_USER_NOTIF},
-		{Syscall: unix.SYS_OPEN, Action: unix.SECCOMP_RET_USER_NOTIF},
-		{Syscall: unix.SYS_VFORK, Action: unix.SECCOMP_RET_USER_NOTIF},
-	}
-
 	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_amd64.go
 	Sysnums = []string{
 		unix.SYS_READ:                    "read",
@@ -422,7 +416,7 @@ var (
 		unix.SYS_OPEN_TREE_ATTR:          "open_tree_attr",
 	}
 
-	syscalls = map[string]int{
+	syscalls = map[string]uint32{
 		"read":                    unix.SYS_READ,
 		"write":                   unix.SYS_WRITE,
 		"open":                    unix.SYS_OPEN,

@@ -18,8 +18,6 @@ func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
 }
 
 var (
-	archSyscallConfig = []SyscallConfig{}
-
 	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_arm64.go
 	Sysnums = []string{
 		unix.SYS_IO_SETUP:                "io_setup",
@@ -348,7 +346,7 @@ var (
 		unix.SYS_OPEN_TREE_ATTR:          "open_tree_attr",
 	}
 
-	syscalls = map[string]int{
+	syscalls = map[string]uint32{
 		"io_setup":                unix.SYS_IO_SETUP,
 		"io_destroy":              unix.SYS_IO_DESTROY,
 		"io_submit":               unix.SYS_IO_SUBMIT,
