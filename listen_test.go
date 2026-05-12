@@ -1,4 +1,4 @@
-package sandbox
+package sandbox_test
 
 import (
 	"fmt"
@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/leftmike/sandbox"
 )
 
 func TestOpenatAbsolute(t *testing.T) {
@@ -18,7 +20,7 @@ func TestOpenatAbsolute(t *testing.T) {
 	want := f.Name()
 
 	var found bool
-	cmd := Command("/bin/cat", want)
+	cmd := sandbox.Command("/bin/cat", want)
 	cmd.Handler = testHandler{
 		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
@@ -48,7 +50,7 @@ func TestOpenatATFDCWD(t *testing.T) {
 	want := filepath.Join(dir, name)
 
 	var found bool
-	cmd := Command("/bin/cat", name)
+	cmd := sandbox.Command("/bin/cat", name)
 	cmd.Dir = dir
 	cmd.Handler = testHandler{
 		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
@@ -96,7 +98,7 @@ except Exception:
 os.close(dirfd)
 `
 	var found bool
-	cmd := Command(python, "-c", script, dir, name)
+	cmd := sandbox.Command(python, "-c", script, dir, name)
 	cmd.Handler = testHandler{
 		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
@@ -147,7 +149,7 @@ func TestExecveatRelative(t *testing.T) {
 		`0`)
 
 	var found bool
-	cmd := Command(python, "-c", script)
+	cmd := sandbox.Command(python, "-c", script)
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
@@ -162,7 +164,7 @@ func TestExecveatRelative(t *testing.T) {
 		t.Errorf("execveat(dirfd, %q): handler not called with %s", trueBase, truePath)
 	}
 
-	cmd = Command(python, "-c", script)
+	cmd = sandbox.Command(python, "-c", script)
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			return pathname != truePath
@@ -193,7 +195,7 @@ func TestExecveatATEmptyPath(t *testing.T) {
 		`0x1000`)
 
 	var found bool
-	cmd := Command(python, "-c", script)
+	cmd := sandbox.Command(python, "-c", script)
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
@@ -208,7 +210,7 @@ func TestExecveatATEmptyPath(t *testing.T) {
 		t.Errorf("execveat(fd, '', AT_EMPTY_PATH): handler not called with %s", truePath)
 	}
 
-	cmd = Command(python, "-c", script)
+	cmd = sandbox.Command(python, "-c", script)
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			return pathname != truePath

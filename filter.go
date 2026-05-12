@@ -13,24 +13,22 @@ type FilterConfig struct {
 	Errno  syscall.Errno
 }
 
-// XXX: fc FilterConfig
-func sockFilterAction(fltr []unix.SockFilter, what string, action uint32,
-	errno syscall.Errno) []unix.SockFilter {
+func sockFilterAction(fltr []unix.SockFilter, what string, fc FilterConfig) []unix.SockFilter {
 
-	switch action {
+	switch fc.Action {
 	case unix.SECCOMP_RET_ALLOW, unix.SECCOMP_RET_KILL_PROCESS,
 		unix.SECCOMP_RET_USER_NOTIF:
 		return append(fltr,
-			unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: action})
+			unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: fc.Action})
 
 	case unix.SECCOMP_RET_ERRNO:
 		return append(fltr, unix.SockFilter{
 			Code: unix.BPF_RET | unix.BPF_K,
-			K:    action | uint32(errno&unix.SECCOMP_RET_DATA),
+			K:    fc.Action | uint32(fc.Errno&unix.SECCOMP_RET_DATA),
 		})
 
 	default:
-		panic(fmt.Sprintf("%s: unexpected seccomp ret: %d", what, action))
+		panic(fmt.Sprintf("%s: unexpected seccomp ret: %d", what, fc.Action))
 	}
 }
 
@@ -52,7 +50,7 @@ func makeSockFilter(cfg map[string]FilterConfig) []unix.SockFilter {
 
 		fltr = append(fltr, unix.SockFilter{
 			Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: sc, Jt: 0, Jf: 1})
-		fltr = sockFilterAction(fltr, name, fc.Action, fc.Errno)
+		fltr = sockFilterAction(fltr, name, fc)
 	}
 
 	return append(fltr,

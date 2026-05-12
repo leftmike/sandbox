@@ -1,5 +1,4 @@
-// XXX: can this be sandbox_test?
-package sandbox
+package sandbox_test
 
 import (
 	"bytes"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/leftmike/sandbox"
 	"golang.org/x/sys/unix"
 )
 
@@ -59,7 +59,7 @@ func (th testHandler) Syscall(pid uint32, sysnum int) bool {
 }
 
 func TestCommand(t *testing.T) {
-	cmd := Command("/bin/echo", "hello")
+	cmd := sandbox.Command("/bin/echo", "hello")
 	if cmd.Path != "/bin/echo" {
 		t.Errorf("got path %s want /bin/echo", cmd.Path)
 	}
@@ -67,20 +67,20 @@ func TestCommand(t *testing.T) {
 
 func TestCommandContext(t *testing.T) {
 	ctx := context.Background()
-	cmd := CommandContext(ctx, "/bin/echo", "hello")
+	cmd := sandbox.CommandContext(ctx, "/bin/echo", "hello")
 	if cmd.Path != "/bin/echo" {
 		t.Errorf("got path %s want /bin/echo", cmd.Path)
 	}
 }
 
 func TestCmdRun(t *testing.T) {
-	cmd := Command("/bin/true")
+	cmd := sandbox.Command("/bin/true")
 	cmd.Handler = testHandler{}
 	if err := cmd.Run(); err != nil {
 		t.Errorf("Run(/bin/true) = %v, want nil", err)
 	}
 
-	cmd = Command("/bin/false")
+	cmd = sandbox.Command("/bin/false")
 	cmd.Handler = testHandler{}
 	if err := cmd.Run(); err == nil {
 		t.Error("Run(/bin/false) = nil, want error")
@@ -88,7 +88,7 @@ func TestCmdRun(t *testing.T) {
 }
 
 func TestCmdOutput(t *testing.T) {
-	cmd := Command("/bin/echo", "hello")
+	cmd := sandbox.Command("/bin/echo", "hello")
 	cmd.Handler = testHandler{}
 	out, err := cmd.Output()
 	if err != nil {
@@ -100,7 +100,7 @@ func TestCmdOutput(t *testing.T) {
 }
 
 func TestCmdOutputStdoutAlreadySet(t *testing.T) {
-	cmd := Command("/bin/echo", "hello")
+	cmd := sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &strings.Builder{}
 	_, err := cmd.Output()
 	if err == nil || !strings.Contains(err.Error(), "stdout already set") {
@@ -109,7 +109,7 @@ func TestCmdOutputStdoutAlreadySet(t *testing.T) {
 }
 
 func TestCmdCombinedOutput(t *testing.T) {
-	cmd := Command("/bin/echo", "hello")
+	cmd := sandbox.Command("/bin/echo", "hello")
 	cmd.Handler = testHandler{}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -121,7 +121,7 @@ func TestCmdCombinedOutput(t *testing.T) {
 }
 
 func TestCmdCombinedOutputStdoutAlreadySet(t *testing.T) {
-	cmd := Command("/bin/echo")
+	cmd := sandbox.Command("/bin/echo")
 	cmd.Stdout = &strings.Builder{}
 	_, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(err.Error(), "stdout already set") {
@@ -130,7 +130,7 @@ func TestCmdCombinedOutputStdoutAlreadySet(t *testing.T) {
 }
 
 func TestCmdCombinedOutputStderrAlreadySet(t *testing.T) {
-	cmd := Command("/bin/echo")
+	cmd := sandbox.Command("/bin/echo")
 	cmd.Stderr = &strings.Builder{}
 	_, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(err.Error(), "stderr already set") {
@@ -139,7 +139,7 @@ func TestCmdCombinedOutputStderrAlreadySet(t *testing.T) {
 }
 
 func TestCmdEnviron(t *testing.T) {
-	cmd := Command("/bin/true")
+	cmd := sandbox.Command("/bin/true")
 	cmd.Env = []string{"FOO=bar", "BAZ=qux"}
 	env := cmd.Environ()
 	if len(env) != 2 {
@@ -154,7 +154,7 @@ func TestCmdEnviron(t *testing.T) {
 }
 
 func TestCmdEnvironPassthrough(t *testing.T) {
-	cmd := Command("/bin/sh", "-c", "/usr/bin/echo $FOO")
+	cmd := sandbox.Command("/bin/sh", "-c", "/usr/bin/echo $FOO")
 	cmd.Handler = testHandler{}
 	cmd.Env = []string{"FOO=hello"}
 	out, err := cmd.Output()
@@ -167,14 +167,14 @@ func TestCmdEnvironPassthrough(t *testing.T) {
 }
 
 func TestCmdString(t *testing.T) {
-	cmd := Command("/usr/bin/echo", "hello", "world")
+	cmd := sandbox.Command("/usr/bin/echo", "hello", "world")
 	if got, want := cmd.String(), "/usr/bin/echo hello world"; got != want {
 		t.Errorf("String() = %s, want %s", got, want)
 	}
 }
 
 func TestCmdStdoutPipe(t *testing.T) {
-	cmd := Command("/usr/bin/echo", "hello")
+	cmd := sandbox.Command("/usr/bin/echo", "hello")
 	cmd.Handler = testHandler{}
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -196,7 +196,7 @@ func TestCmdStdoutPipe(t *testing.T) {
 }
 
 func TestCmdStderrPipe(t *testing.T) {
-	cmd := Command("/bin/sh", "-c", "/usr/bin/echo error >&2")
+	cmd := sandbox.Command("/bin/sh", "-c", "/usr/bin/echo error >&2")
 	cmd.Handler = testHandler{}
 	pipe, err := cmd.StderrPipe()
 	if err != nil {
@@ -218,7 +218,7 @@ func TestCmdStderrPipe(t *testing.T) {
 }
 
 func TestCmdStdinPipe(t *testing.T) {
-	cmd := Command("/bin/cat")
+	cmd := sandbox.Command("/bin/cat")
 	cmd.Handler = testHandler{}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -267,7 +267,7 @@ func TestRun(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		cmd := Command(c.cmd)
+		cmd := sandbox.Command(c.cmd)
 		cmd.Handler = testHandler{}
 
 		ret, err := exitCode(cmd.Run())
@@ -290,7 +290,7 @@ func TestRunOpen(t *testing.T) {
 
 	var found bool
 	var buf bytes.Buffer
-	cmd := Command("/bin/cat", f.Name())
+	cmd := sandbox.Command("/bin/cat", f.Name())
 	cmd.Stdout = &buf
 	cmd.Handler = testHandler{
 		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
@@ -315,7 +315,7 @@ func TestRunOpen(t *testing.T) {
 		t.Errorf("Run() %s not handled", f.Name())
 	}
 
-	cmd = Command("/bin/cat", f.Name())
+	cmd = sandbox.Command("/bin/cat", f.Name())
 	cmd.Handler = testHandler{
 		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
@@ -339,7 +339,7 @@ func TestRunOpen(t *testing.T) {
 func TestRunExec(t *testing.T) {
 	var found bool
 	var buf bytes.Buffer
-	cmd := Command("/bin/echo", "hello")
+	cmd := sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
@@ -363,7 +363,7 @@ func TestRunExec(t *testing.T) {
 	}
 
 	buf.Reset()
-	cmd = Command("/bin/echo", "hello")
+	cmd = sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
 	cmd.Handler = testHandler{
 		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
@@ -387,7 +387,7 @@ func TestRunExec(t *testing.T) {
 
 func TestRunExecArgv(t *testing.T) {
 	want := []string{"/bin/echo", "hello", "world"}
-	cmd := Command(want[0], want[1:]...)
+	cmd := sandbox.Command(want[0], want[1:]...)
 
 	var gotArgv []string
 	cmd.Handler = testHandler{
@@ -411,7 +411,7 @@ func TestRunExecArgv(t *testing.T) {
 
 func TestRunExecEnv(t *testing.T) {
 	wantEnv := []string{"FOO=bar", "BAZ=qux"}
-	cmd := Command("/bin/true")
+	cmd := sandbox.Command("/bin/true")
 	cmd.Env = wantEnv
 
 	var gotEnv []string
@@ -447,7 +447,7 @@ t.start()
 t.join()
 `
 	var threadCloned bool
-	cmd := Command(python, "-c", script)
+	cmd := sandbox.Command(python, "-c", script)
 	cmd.Handler = testHandler{
 		clone: func(pid uint32, sysnum int, flags uint64) bool {
 			if flags&unix.CLONE_THREAD != 0 {
@@ -469,7 +469,7 @@ t.join()
 
 func TestRunClone(t *testing.T) {
 	var cloned bool
-	cmd := Command("/bin/sh", "-c", "/bin/true")
+	cmd := sandbox.Command("/bin/sh", "-c", "/bin/true")
 	cmd.Handler = testHandler{
 		clone: func(pid uint32, sysnum int, flags uint64) bool {
 			cloned = true
@@ -486,7 +486,7 @@ func TestRunClone(t *testing.T) {
 		t.Error("Run() clone not handled")
 	}
 
-	cmd = Command("/bin/sh", "-c", "/bin/true")
+	cmd = sandbox.Command("/bin/sh", "-c", "/bin/true")
 	cmd.Handler = testHandler{
 		clone: func(pid uint32, sysnum int, flags uint64) bool {
 			return false
