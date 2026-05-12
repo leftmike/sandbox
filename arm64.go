@@ -1,6 +1,6 @@
 //go:build arm64 && linux
 
-package main
+package sandbox
 
 import (
 	"golang.org/x/sys/unix"

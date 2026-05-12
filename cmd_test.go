@@ -1,4 +1,5 @@
-package main
+// XXX: can this be sandbox_test?
+package sandbox
 
 import (
 	"bytes"

@@ -5,12 +5,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
+
+	"github.com/leftmike/sandbox"
 )
 
 type syscallHandler struct{}
 
 func (_ syscallHandler) Clone(pid uint32, sysnum int, flags uint64) bool {
-	fmt.Printf("%d: %s(%x)\n", pid, Sysnums[sysnum], flags)
+	fmt.Printf("%d: %s(%x)\n", pid, sandbox.Sysnums[sysnum], flags)
 	return true
 }
 
@@ -20,19 +22,20 @@ func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []str
 	if len(env) > 5 {
 		env = []string{env[0], env[1], "...", env[len(env)-2], env[len(env)-1]}
 	}
-	fmt.Printf("%d: %s(%s, %v, %v)\n", pid, Sysnums[sysnum], pathname, argv, env)
+	fmt.Printf("%d: %s(%s, %v, %v)\n", pid, sandbox.Sysnums[sysnum], pathname, argv, env)
 	return true
 }
 
 func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
 	mode uint32, resolve uint64) bool {
 
-	fmt.Printf("%d: %s(%s, %x, %x, %x)\n", pid, Sysnums[sysnum], pathname, flags, mode, resolve)
+	fmt.Printf("%d: %s(%s, %x, %x, %x)\n", pid, sandbox.Sysnums[sysnum], pathname, flags, mode,
+		resolve)
 	return true
 }
 
 func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {
-	fmt.Printf("%d: syscall: %s:%d\n", pid, Sysnums[sysnum], sysnum)
+	fmt.Printf("%d: syscall: %s:%d\n", pid, sandbox.Sysnums[sysnum], sysnum)
 	return true
 }
 
@@ -42,7 +45,7 @@ func main() {
 	}
 
 	fmt.Println(os.Args[1:])
-	cmd := Command(os.Args[1], os.Args[2:]...)
+	cmd := sandbox.Command(os.Args[1], os.Args[2:]...)
 	cmd.Handler = syscallHandler{}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
