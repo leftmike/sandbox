@@ -20,6 +20,8 @@ const (
 	childSendmsgFailed     = 192
 	childRecvConfigFailed  = 193
 	childExecCommandFailed = 194
+
+	childNotifArg0 = "__child_notif"
 )
 
 type childConfig struct {
@@ -77,7 +79,7 @@ func isSocketFd(fd int) bool {
 }
 
 func init() {
-	if os.Args[0] != "__sandbox_child" {
+	if os.Args[0] != childNotifArg0 {
 		return
 	}
 

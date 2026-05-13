@@ -132,7 +132,7 @@ func (cmd *Cmd) Start() (err error) {
 	}
 
 	cmd.Path = path
-	cmd.Args = []string{"__sandbox_child"}
+	cmd.Args = []string{childNotifArg0}
 	cmd.ExtraFiles = []*os.File{cf}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
