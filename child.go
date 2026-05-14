@@ -120,11 +120,39 @@ func init() {
 
 	// Spawn the mount helper while we still have CAP_SYS_ADMIN in the new user
 	// namespace and before the seccomp filter is installed (otherwise the helper
-	// would inherit the filter and trip on its own mount() calls).
+	// would inherit the filter and trip on its own mount() calls).  After the
+	// fork we unshare our own mount namespace, mark it MS_SLAVE of the helper's,
+	// and unmount /run/.host -- slave-side unmounts don't propagate back, so the
+	// helper retains its view of the host while the tracee loses access.  This
+	// closes the TOCTOU window where a malicious tracee could swap an execve
+	// path argument to point at /run/.host between the listener's check and
+	// the kernel's resume.
 	if cfg.DynamicAllowedExecs {
 		if err := startMountHelper(childMountHelperFd); err != nil {
 			fmt.Fprintf(os.Stderr, "sandbox child: start mount helper: %s\n", err)
 			os.Exit(childMountHelperFailed)
+		}
+		// Unshare a private mount namespace, mark it MS_SLAVE so we still receive
+		// the helper's runtime bind mounts but our changes don't propagate back.
+		// Then overlay an empty tmpfs on /run/.host: the helper retains its view
+		// of the host mirror in the master ns, but the tracee can't see anything
+		// under /run/.host -- it would only see an empty tmpfs there.  This
+		// closes the execve TOCTOU window where the tracee could swap the
+		// pathname arg to point at /run/.host between the listener's check and
+		// the kernel's resume.
+		if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
+			fmt.Fprintf(os.Stderr, "sandbox child: unshare mount ns: %s\n", err)
+			os.Exit(childMountFailed)
+		}
+		if err := unix.Mount("", "/", "", unix.MS_SLAVE|unix.MS_REC, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "sandbox child: mount / slave: %s\n", err)
+			os.Exit(childMountFailed)
+		}
+		if err := unix.Mount("tmpfs", hostRootMountpoint, "tmpfs", unix.MS_RDONLY,
+			"size=4k,mode=0"); err != nil {
+			fmt.Fprintf(os.Stderr, "sandbox child: overlay hide %s: %s\n",
+				hostRootMountpoint, err)
+			os.Exit(childMountFailed)
 		}
 	}
 

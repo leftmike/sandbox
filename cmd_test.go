@@ -674,6 +674,44 @@ func TestCmdDynamicAllowedExecsSubprocess(t *testing.T) {
 	}
 }
 
+// TestCmdDynamicAllowedExecsHostRootHidden verifies the tracee cannot reach
+// the host mirror at /run/.host even though the mount helper still uses it.
+// This is the user-facing property that closes the execve TOCTOU window: a
+// peer thread can't redirect the kernel's path resolution into /run/.host
+// because /run/.host appears empty inside the tracee's mount namespace.
+func TestCmdDynamicAllowedExecsHostRootHidden(t *testing.T) {
+	skipIfNoUserNS(t)
+
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh not found")
+	}
+	lsPath, err := exec.LookPath("ls")
+	if err != nil {
+		t.Skip("ls not found")
+	}
+
+	var buf bytes.Buffer
+	// Allow sh + ls and let ls report what /run/.host looks like inside the
+	// sandbox.  An empty listing means the overlay tmpfs is hiding the host
+	// mirror; the tracee cannot reach any host binary via that path.
+	cmd := Command(shPath, "-c", lsPath+" -la /run/.host 2>&1; exit 0")
+	cmd.Stdout = &buf
+	cmd.DynamicAllowedExecs = true
+	cmd.Handler = testHandler{}
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	got := buf.String()
+	// The tracee should see no host top-level dirs leaking through.
+	for _, leaked := range []string{"usr", "lib64", "etc", "var"} {
+		if strings.Contains(got, " "+leaked) {
+			t.Errorf("/run/.host leaked %q to tracee; ls output:\n%s", leaked, got)
+		}
+	}
+}
+
 func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := Command("/bin/sh", "-c", "/bin/true")

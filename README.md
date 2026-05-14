@@ -68,16 +68,29 @@ bind-mounted in an unprivileged user namespace).  The helper resolves a request
 for `/bin/echo` as `/run/.host/bin/echo`.  Communication is a textual
 SOCK_SEQPACKET protocol: `MOUNT <src> <target>` ↔ `OK` / `ERR <msg>`.
 
+### TOCTOU mitigation
+
+`SECCOMP_USER_NOTIF_FLAG_CONTINUE` has a documented double-fetch window: after
+the listener inspects the syscall arguments and responds with CONTINUE, the
+kernel re-reads them from tracee memory before executing the syscall.  A
+multi-threaded tracee could otherwise swap the `execve` path argument to point
+at `/run/.host/bin/sh` between the listener's check and the kernel's resume,
+bypassing the allowlist.
+
+To close this window, the sandbox child unshares its own mount namespace as
+`MS_SLAVE` of the helper's after spawning the helper, then mounts an empty
+read-only tmpfs over `/run/.host`.  The helper retains its view of the host
+mirror (its mount namespace is the master and isn't affected by slave-side
+mounts), so it can still resolve `/run/.host/<path>` for bind-mount sources.
+The tracee, however, sees only an empty `/run/.host` and has no path it can
+swap to that would reach the host filesystem.
+
 ### Trade-offs
 
-- `/run/.host` is visible to the sandboxed process — it can read host file
-  contents but cannot bypass exec control, since `execve("/run/.host/bin/foo")`
-  hits the seccomp listener with that pathname; the handler should normalise
-  paths or reject the prefix if it cares.
-- `SECCOMP_USER_NOTIF_FLAG_CONTINUE` has a known TOCTOU window where the kernel
-  re-reads syscall arguments after the listener responds.  A multi-threaded
-  tracee with a cooperating peer thread could swap the pathname between
-  resolution and resume.
 - Library dependencies of the freshly-mounted executable still come from the
   static `defaultBindMounts`; if the binary needs something outside that set
   (a custom rpath, a private libdir) you must add it to `Cmd.BindMounts`.
+- The mitigation relies on Linux mount-namespace propagation (`MS_SHARED` /
+  `MS_SLAVE`) working as documented.  A kernel bug in propagation could break
+  the isolation; the `TestCmdDynamicAllowedExecsHostRootHidden` test guards
+  against the most obvious failure (host paths visible in the tracee).

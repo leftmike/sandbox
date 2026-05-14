@@ -145,6 +145,18 @@ func setupMountNS(cfg *childConfig) {
 		fmt.Fprintf(os.Stderr, "sandbox child: chdir /: %s\n", err)
 		os.Exit(childPivotRootFailed)
 	}
+
+	// Dynamic mode: make the root and all submounts MS_SHARED so the helper's
+	// runtime bind mounts propagate to the tracee.  The tracee will then
+	// unshare its own mount namespace, mark it MS_SLAVE, and unmount
+	// /run/.host -- slave-side unmounts don't propagate to the master, so the
+	// helper retains its view of the host filesystem.
+	if cfg.DynamicAllowedExecs {
+		if err := unix.Mount("", "/", "", unix.MS_SHARED|unix.MS_REC, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "sandbox child: mount / shared: %s\n", err)
+			os.Exit(childMountFailed)
+		}
+	}
 }
 
 // ensureTarget creates an empty file or directory at dst to serve as a bind-mount target.
