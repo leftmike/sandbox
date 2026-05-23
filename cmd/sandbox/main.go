@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -40,13 +41,18 @@ func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {
 }
 
 func main() {
-	if len(os.Args) < 2 {
+	proxy := flag.Bool("proxy", false, "proxy open syscalls through the sandbox")
+	flag.Parse()
+
+	args := flag.Args()
+	if len(args) < 1 {
 		log.Fatalln("missing command to sandbox")
 	}
 
-	fmt.Println(os.Args[1:])
-	cmd := sandbox.Command(os.Args[1], os.Args[2:]...)
+	fmt.Println(args)
+	cmd := sandbox.Command(args[0], args[1:]...)
 	cmd.Handler = syscallHandler{}
+	cmd.ProxyOpen = *proxy
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

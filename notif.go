@@ -168,6 +168,8 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 		uint32(mode), resolve) {
 
 		return 0, -int32(unix.EACCES)
+	} else if !cmd.ProxyOpen {
+		return 0, continueSyscall
 	}
 
 	dfd := int(-1)

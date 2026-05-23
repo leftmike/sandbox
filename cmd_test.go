@@ -288,51 +288,55 @@ func TestRunOpen(t *testing.T) {
 	f.Close()
 	defer os.Remove(f.Name())
 
-	var found bool
-	var buf bytes.Buffer
-	cmd := sandbox.Command("/bin/cat", f.Name())
-	cmd.Stdout = &buf
-	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-			resolve uint64) bool {
+	for _, proxyOpen := range []bool{true, false} {
+		var found bool
+		var buf bytes.Buffer
+		cmd := sandbox.Command("/bin/cat", f.Name())
+		cmd.Stdout = &buf
+		cmd.ProxyOpen = proxyOpen
+		cmd.Handler = testHandler{
+			open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+				resolve uint64) bool {
 
-			if pathname == f.Name() {
-				found = true
-			}
+				if pathname == f.Name() {
+					found = true
+				}
 
-			return true
-		},
-	}
+				return true
+			},
+		}
 
-	ret, err := exitCode(cmd.Run())
-	if err != nil {
-		t.Errorf("Run() failed with %s", err)
-	} else if ret != 0 {
-		t.Errorf("Run() got %d want 0", ret)
-	} else if !strings.Contains(buf.String(), "hello sandbox") {
-		t.Errorf("Run() missing output: %s", buf.String())
-	} else if !found {
-		t.Errorf("Run() %s not handled", f.Name())
-	}
+		ret, err := exitCode(cmd.Run())
+		if err != nil {
+			t.Errorf("ProxyOpen=%v: Run() failed with %s", proxyOpen, err)
+		} else if ret != 0 {
+			t.Errorf("ProxyOpen=%v: Run() got %d want 0", proxyOpen, ret)
+		} else if !strings.Contains(buf.String(), "hello sandbox") {
+			t.Errorf("ProxyOpen=%v: Run() missing output: %s", proxyOpen, buf.String())
+		} else if !found {
+			t.Errorf("ProxyOpen=%v: Run() %s not handled", proxyOpen, f.Name())
+		}
 
-	cmd = sandbox.Command("/bin/cat", f.Name())
-	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-			resolve uint64) bool {
+		cmd = sandbox.Command("/bin/cat", f.Name())
+		cmd.ProxyOpen = proxyOpen
+		cmd.Handler = testHandler{
+			open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+				resolve uint64) bool {
 
-			if pathname == f.Name() {
-				return false
-			}
+				if pathname == f.Name() {
+					return false
+				}
 
-			return true
-		},
-	}
+				return true
+			},
+		}
 
-	ret, err = exitCode(cmd.Run())
-	if err != nil {
-		t.Errorf("Run() failed with %s", err)
-	} else if ret == 0 {
-		t.Errorf("Run() got %d want not 0", ret)
+		ret, err = exitCode(cmd.Run())
+		if err != nil {
+			t.Errorf("ProxyOpen=%v: Run() failed with %s", proxyOpen, err)
+		} else if ret == 0 {
+			t.Errorf("ProxyOpen=%v: Run() got %d want not 0", proxyOpen, ret)
+		}
 	}
 }
 
