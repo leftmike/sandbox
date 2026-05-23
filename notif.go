@@ -51,14 +51,14 @@ func sendConfig(fd int, cfg *childConfig) error {
 	return unix.Sendmsg(fd, buf, nil, nil, 0)
 }
 
-func listenNotif(fd int, cancelFd int, h Handler) error {
+func (cmd *Cmd) listenNotif(fd int, cancelFd int) error {
 	for {
 		ntf, err := ioctlNotifRecv(fd, cancelFd)
 		if err != nil || ntf == nil {
 			return err
 		}
 
-		val, errno := handleNotif(fd, ntf, h)
+		val, errno := cmd.handleNotif(fd, ntf)
 
 		rsp := notifResp{id: ntf.id}
 		if errno > 0 {
@@ -79,10 +79,10 @@ func listenNotif(fd int, cancelFd int, h Handler) error {
 	}
 }
 
-func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
+func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
-		if h.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0]) {
+		if cmd.Handler.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0]) {
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
@@ -97,21 +97,21 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 			fmt.Printf("clone3: read flags: %s\n", err)
 			return 0, -int32(unix.EACCES)
 		}
-		if h.Clone(ntf.pid, int(ntf.data.nr), binary.LittleEndian.Uint64(buf)) {
+		if cmd.Handler.Clone(ntf.pid, int(ntf.data.nr), binary.LittleEndian.Uint64(buf)) {
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_EXECVE:
-		return handleExecvat(fd, ntf, h, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
+		return cmd.handleExecvat(fd, ntf, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
 			ntf.data.args[2], 0)
 
 	case unix.SYS_EXECVEAT:
-		return handleExecvat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1],
+		return cmd.handleExecvat(fd, ntf, int32(ntf.data.args[0]), ntf.data.args[1],
 			ntf.data.args[2], ntf.data.args[3], ntf.data.args[4])
 
 	case unix.SYS_OPENAT:
-		return handleOpenat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1],
+		return cmd.handleOpenat(fd, ntf, int32(ntf.data.args[0]), ntf.data.args[1],
 			ntf.data.args[2], ntf.data.args[3], 0)
 
 	case unix.SYS_OPENAT2:
@@ -123,11 +123,11 @@ func handleNotif(fd int, ntf *notif, h Handler) (int64, int32) {
 		}
 		oh = *(*unix.OpenHow)(unsafe.Pointer(&buf[0]))
 
-		return handleOpenat(fd, ntf, h, int32(ntf.data.args[0]), ntf.data.args[1], oh.Flags,
+		return cmd.handleOpenat(fd, ntf, int32(ntf.data.args[0]), ntf.data.args[1], oh.Flags,
 			oh.Mode, oh.Resolve)
 
 	default:
-		return handleNotifArch(fd, ntf, h)
+		return cmd.handleNotifArch(fd, ntf)
 	}
 }
 
@@ -156,7 +156,7 @@ func handlePath(fd int, ntf *notif, dirfd int32, path uint64) (string, string, b
 	return dir, pathname, true
 }
 
-func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
+func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	resolve uint64) (int64, int32) {
 
 	dir, pathname, ok := handlePath(fd, ntf, dirfd, path)
@@ -164,7 +164,7 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 		return 0, -int32(unix.EACCES)
 	}
 
-	if !h.Open(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), int32(flags),
+	if !cmd.Handler.Open(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), int32(flags),
 		uint32(mode), resolve) {
 
 		return 0, -int32(unix.EACCES)
@@ -218,7 +218,7 @@ func handleOpenat(fd int, ntf *notif, h Handler, dirfd int32, path, flags, mode,
 	return int64(cfd), 0
 }
 
-func handleExecvat(fd int, ntf *notif, h Handler, dirfd int32, path, args, env,
+func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 	flags uint64) (int64, int32) {
 
 	var dir, pathname string
@@ -249,7 +249,7 @@ func handleExecvat(fd int, ntf *notif, h Handler, dirfd int32, path, args, env,
 		return 0, -int32(unix.EACCES)
 	}
 
-	if h.Exec(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), argv, envp) {
+	if cmd.Handler.Exec(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), argv, envp) {
 		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)

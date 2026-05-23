@@ -10,20 +10,20 @@ const (
 	auditArch = unix.AUDIT_ARCH_X86_64
 )
 
-func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
+func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_FORK, unix.SYS_VFORK:
-		if h.Clone(ntf.pid, int(ntf.data.nr), 0) {
+		if cmd.Handler.Clone(ntf.pid, int(ntf.data.nr), 0) {
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
 
 	case unix.SYS_OPEN:
-		return handleOpenat(fd, ntf, h, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
+		return cmd.handleOpenat(fd, ntf, unix.AT_FDCWD, ntf.data.args[0], ntf.data.args[1],
 			ntf.data.args[2], 0)
 
 	default:
-		if h.Syscall(ntf.pid, int(ntf.data.nr)) {
+		if cmd.Handler.Syscall(ntf.pid, int(ntf.data.nr)) {
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)

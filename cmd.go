@@ -162,7 +162,7 @@ func (cmd *Cmd) Start() (err error) {
 
 	cmd.waitCh = make(chan error, 2)
 	go func() {
-		err := listenNotif(fd, pipe[0], cmd.Handler)
+		err := cmd.listenNotif(fd, pipe[0])
 		if err != nil {
 			cmd.waitCh <- err
 		}

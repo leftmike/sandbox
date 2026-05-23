@@ -10,8 +10,8 @@ const (
 	auditArch = unix.AUDIT_ARCH_AARCH64
 )
 
-func handleNotifArch(fd int, ntf *notif, h Handler) (int64, int32) {
-	if h.Syscall(ntf.pid, int(ntf.data.nr)) {
+func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
+	if cmd.Handler.Syscall(ntf.pid, int(ntf.data.nr)) {
 		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)
