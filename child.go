@@ -14,14 +14,15 @@ const (
 	childSocketFd = 3
 
 	// Failure error codes from the sandbox child.
-	childBadArguments      = 189
-	childNoNewPrivsFailed  = 190
-	childNewListenerFailed = 191
-	childSendmsgFailed     = 192
-	childRecvConfigFailed  = 193
-	childExecCommandFailed = 194
+	childBadArguments       = 189
+	childNoNewPrivsFailed   = 190
+	childNewListenerFailed  = 191
+	childSendmsgFailed      = 192
+	childRecvConfigFailed   = 193
+	childExecCommandFailed  = 194
+	childMountSandboxFailed = 195
 
-	childNotifArg0 = "__child_notif"
+	sandboxChildArg0 = "__sandbox_child"
 )
 
 type childConfig struct {
@@ -56,7 +57,7 @@ func installListener(sf []unix.SockFilter) int {
 	fd, _, errno := unix.Syscall(unix.SYS_SECCOMP, unix.SECCOMP_SET_MODE_FILTER,
 		unix.SECCOMP_FILTER_FLAG_NEW_LISTENER, uintptr(unsafe.Pointer(&sfp)))
 	if errno != 0 {
-		fmt.Fprintf(os.Stderr, "seccomp(SET_MODE_FILTER, NEW_LISTENER): %d", errno)
+		fmt.Fprintf(os.Stderr, "seccomp(SET_MODE_FILTER, NEW_LISTENER): %d\n", errno)
 		os.Exit(childNewListenerFailed)
 	}
 
@@ -79,7 +80,7 @@ func isSocketFd(fd int) bool {
 }
 
 func init() {
-	if os.Args[0] != childNotifArg0 {
+	if os.Args[0] != sandboxChildArg0 {
 		return
 	}
 
@@ -96,16 +97,18 @@ func init() {
 		os.Exit(childBadArguments)
 	}
 
-	err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
-		os.Exit(childNoNewPrivsFailed)
-	}
-
 	cfg, err := recvConfig(childSocketFd)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: recv config: %s\n", err)
 		os.Exit(childRecvConfigFailed)
+	}
+
+	// XXX: mountSandbox(cfg)
+
+	err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
+		os.Exit(childNoNewPrivsFailed)
 	}
 
 	fd := installListener(cfg.Filter)
