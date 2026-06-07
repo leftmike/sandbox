@@ -17,10 +17,10 @@ import (
 type testHandler struct {
 	clone      func(pid uint32, sysnum int, flags uint64) bool
 	exec       func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
-	execFailed func(pid uint32, sysnum int, err error)
+	execFailed func(pid uint32, sysnum int, pathname string, err error)
 	open       func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 		resolve uint64) bool
-	openFailed func(pid uint32, sysnum int, err error)
+	openFailed func(pid uint32, sysnum int, pathname string, err error)
 	syscall    func(pid uint32, sysnum int) bool
 }
 
@@ -42,9 +42,9 @@ func (th testHandler) Exec(pid uint32, sysnum int, pathname string, argv []strin
 	return true
 }
 
-func (th testHandler) ExecFailed(pid uint32, sysnum int, err error) {
+func (th testHandler) ExecFailed(pid uint32, sysnum int, pathname string, err error) {
 	if th.execFailed != nil {
-		th.execFailed(pid, sysnum, err)
+		th.execFailed(pid, sysnum, pathname, err)
 	}
 }
 
@@ -58,9 +58,9 @@ func (th testHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
 	return true
 }
 
-func (th testHandler) OpenFailed(pid uint32, sysnum int, err error) {
+func (th testHandler) OpenFailed(pid uint32, sysnum int, pathname string, err error) {
 	if th.openFailed != nil {
-		th.openFailed(pid, sysnum, err)
+		th.openFailed(pid, sysnum, pathname, err)
 	}
 }
 

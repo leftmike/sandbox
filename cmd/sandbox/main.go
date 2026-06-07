@@ -27,8 +27,8 @@ func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []str
 	return true
 }
 
-func (_ syscallHandler) ExecFailed(pid uint32, sysnum int, err error) {
-	fmt.Printf("%d: %s failed: %s\n", pid, sandbox.Sysnums[sysnum], err)
+func (_ syscallHandler) ExecFailed(pid uint32, sysnum int, pathname string, err error) {
+	fmt.Printf("%d: %s(%s) failed: %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
 }
 
 func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
@@ -39,8 +39,8 @@ func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int3
 	return true
 }
 
-func (_ syscallHandler) OpenFailed(pid uint32, sysnum int, err error) {
-	fmt.Printf("%d: %s failed: %s\n", pid, sandbox.Sysnums[sysnum], err)
+func (_ syscallHandler) OpenFailed(pid uint32, sysnum int, pathname string, err error) {
+	fmt.Printf("%d: %s(%s) failed: %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
 }
 
 func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {

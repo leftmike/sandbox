@@ -118,7 +118,8 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 		var oh unix.OpenHow
 		buf, err := readMemory(fd, ntf, ntf.data.args[2], uint64(unsafe.Sizeof(oh)))
 		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
-			cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), fmt.Errorf("read open_how: %s", err))
+			cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), "",
+				fmt.Errorf("read open_how: %s", err))
 			return 0, -int32(unix.EACCES)
 		}
 		oh = *(*unix.OpenHow)(unsafe.Pointer(&buf[0]))
@@ -134,7 +135,7 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 func handlePath(fd int, ntf *notif, dirfd int32, path uint64) (string, string, error) {
 	pathname, err := readString(fd, ntf, path, 2048)
 	if err != nil {
-		return "", "", fmt.Errorf("read string: %s\n", err)
+		return "", "", fmt.Errorf("read string: %s", err)
 
 	}
 
@@ -149,7 +150,7 @@ func handlePath(fd int, ntf *notif, dirfd int32, path uint64) (string, string, e
 		dir, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("resolve dirfd: %s\n", err)
+		return "", pathname, fmt.Errorf("resolve dirfd: %s", err)
 	}
 
 	return dir, pathname, nil
@@ -160,16 +161,17 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 
 	dir, pathname, err := handlePath(fd, ntf, dirfd, path)
 	if err != nil {
-		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), err)
+		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), pathname, err)
 		return 0, -int32(unix.EACCES)
 	}
+	abspath := filepath.Join(dir, pathname)
 
 	dfd := int(-1)
 	if !filepath.IsAbs(pathname) {
 		var err error
 		dfd, err = unix.Open(dir, unix.O_PATH|unix.O_DIRECTORY, 0)
 		if err != nil {
-			cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), fmt.Errorf("%s: %s", err, dir))
+			cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, err)
 			if errno, ok := err.(unix.Errno); ok {
 				return 0, -int32(errno)
 			}
@@ -190,8 +192,7 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 		sfd, err = unix.Openat(dfd, pathname, int(flags), uint32(mode))
 	}
 	if err != nil {
-		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr),
-			fmt.Errorf("%s: %s", err, filepath.Join(dir, pathname)))
+		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, err)
 		if errno, ok := err.(unix.Errno); ok {
 			return 0, -int32(errno)
 		}
@@ -199,9 +200,7 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	}
 	defer unix.Close(sfd)
 
-	if !cmd.Handler.Open(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), int32(flags),
-		uint32(mode), resolve) {
-
+	if !cmd.Handler.Open(ntf.pid, int(ntf.data.nr), abspath, int32(flags), uint32(mode), resolve) {
 		return 0, -int32(unix.EACCES)
 	}
 
@@ -214,8 +213,7 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	}
 	cfd, errno := ioctlNotifAddfd(fd, addfd)
 	if errno != 0 {
-		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr),
-			fmt.Errorf("seccomp ioctl notif addfd: %s", errno.Error()))
+		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, errno)
 		return 0, -int32(errno)
 	}
 
@@ -230,32 +228,35 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		var err error
 		pathname, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
 		if err != nil {
-			cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr),
-				fmt.Errorf("resolve dirfd (AT_EMPTY_PATH): %s\n", err))
+			cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), "",
+				fmt.Errorf("resolve dirfd (AT_EMPTY_PATH): %s", err))
 			return 0, -int32(unix.EACCES)
 		}
 	} else {
 		var err error
 		dir, pathname, err = handlePath(fd, ntf, dirfd, path)
 		if err != nil {
-			cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), err)
+			cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), pathname, err)
 			return 0, -int32(unix.EACCES)
 		}
 	}
+	abspath := filepath.Join(dir, pathname)
 
 	argv, err := readStringSlice(fd, ntf, args, 4096)
 	if err != nil {
-		cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), fmt.Errorf("read argv: %s\n", err))
+		cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), abspath,
+			fmt.Errorf("read argv: %s", err))
 		return 0, -int32(unix.EACCES)
 	}
 
 	envp, err := readStringSlice(fd, ntf, env, 4096)
 	if err != nil {
-		cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), fmt.Errorf("read envp: %s\n", err))
+		cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), abspath,
+			fmt.Errorf("read envp: %s", err))
 		return 0, -int32(unix.EACCES)
 	}
 
-	if cmd.Handler.Exec(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), argv, envp) {
+	if cmd.Handler.Exec(ntf.pid, int(ntf.data.nr), abspath, argv, envp) {
 		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)
