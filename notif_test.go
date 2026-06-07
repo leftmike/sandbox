@@ -19,26 +19,23 @@ func TestOpenatAbsolute(t *testing.T) {
 	defer os.Remove(f.Name())
 	want := f.Name()
 
-	for _, proxyOpen := range []bool{true, false} {
-		var found bool
-		cmd := sandbox.Command("/bin/cat", want)
-		cmd.ProxyOpen = proxyOpen
-		cmd.Handler = testHandler{
-			open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-				resolve uint64) bool {
+	var found bool
+	cmd := sandbox.Command("/bin/cat", want)
+	cmd.Handler = testHandler{
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
 
-				if pathname == want {
-					found = true
-				}
-				return true
-			},
-		}
-		err = cmd.Run()
-		if err != nil {
-			t.Errorf("ProxyOpen=%v: Run() failed with %s", proxyOpen, err)
-		} else if !found {
-			t.Errorf("ProxyOpen=%v: openat(%s): handler(%s) not called", proxyOpen, want, want)
-		}
+			if pathname == want {
+				found = true
+			}
+			return true
+		},
+	}
+	err = cmd.Run()
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if !found {
+		t.Errorf("openat(%s): handler(%s) not called", want, want)
 	}
 }
 
@@ -52,27 +49,24 @@ func TestOpenatATFDCWD(t *testing.T) {
 	name := filepath.Base(f.Name())
 	want := filepath.Join(dir, name)
 
-	for _, proxyOpen := range []bool{true, false} {
-		var found bool
-		cmd := sandbox.Command("/bin/cat", name)
-		cmd.Dir = dir
-		cmd.ProxyOpen = proxyOpen
-		cmd.Handler = testHandler{
-			open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-				resolve uint64) bool {
+	var found bool
+	cmd := sandbox.Command("/bin/cat", name)
+	cmd.Dir = dir
+	cmd.Handler = testHandler{
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
 
-				if pathname == want {
-					found = true
-				}
-				return true
-			},
-		}
-		err = cmd.Run()
-		if err != nil {
-			t.Errorf("ProxyOpen=%v: Run() failed with %s", proxyOpen, err)
-		} else if !found {
-			t.Errorf("ProxyOpen=%v: openat(AT_FDCWD, %s): handler(%s) not called", proxyOpen, name, want)
-		}
+			if pathname == want {
+				found = true
+			}
+			return true
+		},
+	}
+	err = cmd.Run()
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if !found {
+		t.Errorf("openat(AT_FDCWD, %s): handler(%s) not called", name, want)
 	}
 }
 
@@ -103,26 +97,23 @@ except Exception:
     pass
 os.close(dirfd)
 `
-	for _, proxyOpen := range []bool{true, false} {
-		var found bool
-		cmd := sandbox.Command(python, "-c", script, dir, name)
-		cmd.ProxyOpen = proxyOpen
-		cmd.Handler = testHandler{
-			open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-				resolve uint64) bool {
+	var found bool
+	cmd := sandbox.Command(python, "-c", script, dir, name)
+	cmd.Handler = testHandler{
+		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
 
-				if pathname == want {
-					found = true
-				}
-				return true
-			},
-		}
-		err = cmd.Run()
-		if err != nil {
-			t.Errorf("ProxyOpen=%v: Run() failed with %s", proxyOpen, err)
-		} else if !found {
-			t.Errorf("ProxyOpen=%v: openat(%s, %s): handler(%s) not called", proxyOpen, dir, name, want)
-		}
+			if pathname == want {
+				found = true
+			}
+			return true
+		},
+	}
+	err = cmd.Run()
+	if err != nil {
+		t.Errorf("Run() failed with %s", err)
+	} else if !found {
+		t.Errorf("openat(%s, %s): handler(%s) not called", dir, name, want)
 	}
 }
 

@@ -22,8 +22,7 @@ type Handler interface {
 type Cmd struct {
 	exec.Cmd
 
-	Handler   Handler
-	ProxyOpen bool
+	Handler Handler
 
 	closeFd int
 	waitCh  chan error
