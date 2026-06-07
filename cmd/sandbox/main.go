@@ -6,8 +6,24 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"slices"
+	"strings"
 
 	"github.com/leftmike/sandbox"
+)
+
+var (
+	ignoreExec = []string{}
+
+	ignoreExecFailed = []string{}
+
+	ignoreOpen = []string{
+		"/usr/lib/locale",
+	}
+
+	ignoreOpenFailed = []string{
+		"/usr/lib/locale",
+	}
 )
 
 type syscallHandler struct{}
@@ -20,6 +36,12 @@ func (_ syscallHandler) Clone(pid uint32, sysnum int, flags uint64) bool {
 func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []string,
 	env []string) bool {
 
+	if slices.ContainsFunc(ignoreExec,
+		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
+
+		return true
+	}
+
 	if len(env) > 5 {
 		env = []string{env[0], env[1], "...", env[len(env)-2], env[len(env)-1]}
 	}
@@ -28,11 +50,23 @@ func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []str
 }
 
 func (_ syscallHandler) ExecFailed(pid uint32, sysnum int, pathname string, err error) {
-	fmt.Printf("%d: %s(%s) failed: %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
+	if slices.ContainsFunc(ignoreExecFailed,
+		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
+
+		return
+	}
+
+	fmt.Printf("%d: failed: %s(%s): %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
 }
 
 func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
 	mode uint32, resolve uint64) bool {
+
+	if slices.ContainsFunc(ignoreOpen,
+		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
+
+		return true
+	}
 
 	fmt.Printf("%d: %s(%s, %x, %x, %x)\n", pid, sandbox.Sysnums[sysnum], pathname, flags, mode,
 		resolve)
@@ -40,7 +74,13 @@ func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int3
 }
 
 func (_ syscallHandler) OpenFailed(pid uint32, sysnum int, pathname string, err error) {
-	fmt.Printf("%d: %s(%s) failed: %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
+	if slices.ContainsFunc(ignoreOpenFailed,
+		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
+
+		return
+	}
+
+	fmt.Printf("%d: failed: %s(%s): %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
 }
 
 func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {
