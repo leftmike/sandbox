@@ -17,6 +17,7 @@ type Handler interface {
 	Exec(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
 	ExecFailed(pid uint32, sysnum int, err error)
 	Open(pid uint32, sysnum int, pathname string, flags int32, mode uint32, resolve uint64) bool
+	OpenFailed(pid uint32, sysnum int, err error)
 	Syscall(pid uint32, sysnum int) bool
 }
 

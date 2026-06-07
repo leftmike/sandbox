@@ -20,7 +20,8 @@ type testHandler struct {
 	execFailed func(pid uint32, sysnum int, err error)
 	open       func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 		resolve uint64) bool
-	syscall func(pid uint32, sysnum int) bool
+	openFailed func(pid uint32, sysnum int, err error)
+	syscall    func(pid uint32, sysnum int) bool
 }
 
 func (th testHandler) Clone(pid uint32, sysnum int, flags uint64) bool {
@@ -55,6 +56,12 @@ func (th testHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
 	}
 
 	return true
+}
+
+func (th testHandler) OpenFailed(pid uint32, sysnum int, err error) {
+	if th.openFailed != nil {
+		th.openFailed(pid, sysnum, err)
+	}
 }
 
 func (th testHandler) Syscall(pid uint32, sysnum int) bool {

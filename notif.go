@@ -118,7 +118,7 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 		var oh unix.OpenHow
 		buf, err := readMemory(fd, ntf, ntf.data.args[2], uint64(unsafe.Sizeof(oh)))
 		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
-			fmt.Printf("openat2: read open_how: %s\n", err)
+			cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), fmt.Errorf("read open_how: %s", err))
 			return 0, -int32(unix.EACCES)
 		}
 		oh = *(*unix.OpenHow)(unsafe.Pointer(&buf[0]))
@@ -160,12 +160,7 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 
 	dir, pathname, err := handlePath(fd, ntf, dirfd, path)
 	if err != nil {
-		return 0, -int32(unix.EACCES)
-	}
-
-	if !cmd.Handler.Open(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), int32(flags),
-		uint32(mode), resolve) {
-
+		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), err)
 		return 0, -int32(unix.EACCES)
 	}
 
@@ -174,6 +169,7 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 		var err error
 		dfd, err = unix.Open(dir, unix.O_PATH|unix.O_DIRECTORY, 0)
 		if err != nil {
+			cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr), fmt.Errorf("%s: %s", err, dir))
 			if errno, ok := err.(unix.Errno); ok {
 				return 0, -int32(errno)
 			}
@@ -194,12 +190,20 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 		sfd, err = unix.Openat(dfd, pathname, int(flags), uint32(mode))
 	}
 	if err != nil {
+		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr),
+			fmt.Errorf("%s: %s", err, filepath.Join(dir, pathname)))
 		if errno, ok := err.(unix.Errno); ok {
 			return 0, -int32(errno)
 		}
 		return 0, -int32(unix.EACCES)
 	}
 	defer unix.Close(sfd)
+
+	if !cmd.Handler.Open(ntf.pid, int(ntf.data.nr), filepath.Join(dir, pathname), int32(flags),
+		uint32(mode), resolve) {
+
+		return 0, -int32(unix.EACCES)
+	}
 
 	addfd := notifAddfd{
 		id:    ntf.id,
@@ -210,6 +214,8 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	}
 	cfd, errno := ioctlNotifAddfd(fd, addfd)
 	if errno != 0 {
+		cmd.Handler.OpenFailed(ntf.pid, int(ntf.data.nr),
+			fmt.Errorf("seccomp ioctl notif addfd: %s", errno.Error()))
 		return 0, -int32(errno)
 	}
 
