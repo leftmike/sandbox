@@ -27,6 +27,10 @@ func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []str
 	return true
 }
 
+func (_ syscallHandler) ExecFailed(pid uint32, sysnum int, err error) {
+	fmt.Printf("%d: %s failed: %s\n", pid, sandbox.Sysnums[sysnum], err)
+}
+
 func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
 	mode uint32, resolve uint64) bool {
 

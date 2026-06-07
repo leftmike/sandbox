@@ -15,9 +15,10 @@ import (
 )
 
 type testHandler struct {
-	clone func(pid uint32, sysnum int, flags uint64) bool
-	exec  func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
-	open  func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+	clone      func(pid uint32, sysnum int, flags uint64) bool
+	exec       func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
+	execFailed func(pid uint32, sysnum int, err error)
+	open       func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 		resolve uint64) bool
 	syscall func(pid uint32, sysnum int) bool
 }
@@ -38,6 +39,12 @@ func (th testHandler) Exec(pid uint32, sysnum int, pathname string, argv []strin
 	}
 
 	return true
+}
+
+func (th testHandler) ExecFailed(pid uint32, sysnum int, err error) {
+	if th.execFailed != nil {
+		th.execFailed(pid, sysnum, err)
+	}
 }
 
 func (th testHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
