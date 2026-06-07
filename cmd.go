@@ -22,8 +22,9 @@ type Handler interface {
 type Cmd struct {
 	exec.Cmd
 
-	Handler   Handler
-	ProxyOpen bool
+	Handler      Handler
+	ProxyOpen    bool
+	RestrictExec bool
 
 	closeFd int
 	waitCh  chan error
@@ -126,23 +127,26 @@ func (cmd *Cmd) Start() (err error) {
 
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
-		Path:   cmd.Path,
-		Args:   cmd.Args,
-		Env:    cmd.Env,
-		Filter: defaultSockFilter,
+		Namespace: cmd.RestrictExec,
+		Path:      cmd.Path,
+		Args:      cmd.Args,
+		Env:       cmd.Env,
+		Filter:    defaultSockFilter,
 	}
 
 	cmd.Path = path
 	cmd.Args = []string{sandboxChildArg0}
 	cmd.ExtraFiles = []*os.File{cf}
 
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-		/*
-			Cloneflags:  unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
-			UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: unix.Getuid(), Size: 1}},
-			GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: unix.Getgid(), Size: 1}},
-		*/
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if cmd.RestrictExec {
+		cmd.SysProcAttr.Cloneflags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS
+		cmd.SysProcAttr.UidMappings = []syscall.SysProcIDMap{
+			{ContainerID: 0, HostID: unix.Getuid(), Size: 1},
+		}
+		cmd.SysProcAttr.GidMappings = []syscall.SysProcIDMap{
+			{ContainerID: 0, HostID: unix.Getgid(), Size: 1},
+		}
 	}
 
 	err = cmd.Cmd.Start()
@@ -199,8 +203,10 @@ func (cmd *Cmd) childFailed(err error) error {
 			return errors.New("child: receiving config from sandbox failed")
 		case childExecCommandFailed:
 			return errors.New("child: executing command failed")
-		case childMountSandboxFailed:
-			return errors.New("child: mount sandbox failed")
+		case childMountFailed:
+			return errors.New("child: mount failed")
+		case childPivotRootFailed:
+			return errors.New("child: pivot root failed")
 		}
 	}
 

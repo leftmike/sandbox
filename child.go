@@ -14,22 +14,24 @@ const (
 	childSocketFd = 3
 
 	// Failure error codes from the sandbox child.
-	childBadArguments       = 189
-	childNoNewPrivsFailed   = 190
-	childNewListenerFailed  = 191
-	childSendmsgFailed      = 192
-	childRecvConfigFailed   = 193
-	childExecCommandFailed  = 194
-	childMountSandboxFailed = 195
+	childBadArguments      = 189
+	childNoNewPrivsFailed  = 190
+	childNewListenerFailed = 191
+	childSendmsgFailed     = 192
+	childRecvConfigFailed  = 193
+	childExecCommandFailed = 194
+	childMountFailed       = 195
+	childPivotRootFailed   = 196
 
 	sandboxChildArg0 = "__sandbox_child"
 )
 
 type childConfig struct {
-	Path   string
-	Args   []string
-	Env    []string
-	Filter []unix.SockFilter
+	Namespace bool
+	Path      string
+	Args      []string
+	Env       []string
+	Filter    []unix.SockFilter
 }
 
 func recvConfig(fd int) (*childConfig, error) {
@@ -103,7 +105,9 @@ func init() {
 		os.Exit(childRecvConfigFailed)
 	}
 
-	// XXX: mountSandbox(cfg)
+	if cfg.Namespace {
+		namespaceSandbox(cfg)
+	}
 
 	err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
 	if err != nil {

@@ -42,6 +42,7 @@ func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {
 
 func main() {
 	proxy := flag.Bool("proxy", false, "proxy open syscalls through the sandbox")
+	restrict := flag.Bool("restrict", false, "restrict exec syscalls with mountns")
 	flag.Parse()
 
 	args := flag.Args()
@@ -53,6 +54,7 @@ func main() {
 	cmd := sandbox.Command(args[0], args[1:]...)
 	cmd.Handler = syscallHandler{}
 	cmd.ProxyOpen = *proxy
+	cmd.RestrictExec = *restrict
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
