@@ -94,7 +94,8 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 		}
 		buf, err := readMemory(fd, ntf, ntf.data.args[0], n)
 		if err != nil || len(buf) < 8 {
-			fmt.Printf("clone3: read flags: %s\n", err)
+			cmd.Handler.Failed(ntf.pid, int(ntf.data.nr),
+				fmt.Errorf("clone3: read flags: %s", err))
 			return 0, -int32(unix.EACCES)
 		}
 		if cmd.Handler.Clone(ntf.pid, int(ntf.data.nr), binary.LittleEndian.Uint64(buf)) {
@@ -228,7 +229,7 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		var err error
 		pathname, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
 		if err != nil {
-			cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), "",
+			cmd.Handler.Failed(ntf.pid, int(ntf.data.nr),
 				fmt.Errorf("resolve dirfd (AT_EMPTY_PATH): %s", err))
 			return 0, -int32(unix.EACCES)
 		}
@@ -236,7 +237,7 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		var err error
 		dir, pathname, err = handlePath(fd, ntf, dirfd, path)
 		if err != nil {
-			cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), pathname, err)
+			cmd.Handler.Failed(ntf.pid, int(ntf.data.nr), fmt.Errorf("%s: %s", err, pathname))
 			return 0, -int32(unix.EACCES)
 		}
 	}
@@ -244,15 +245,15 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 
 	argv, err := readStringSlice(fd, ntf, args, 4096)
 	if err != nil {
-		cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), abspath,
-			fmt.Errorf("read argv: %s", err))
+		cmd.Handler.Failed(ntf.pid, int(ntf.data.nr),
+			fmt.Errorf("read argv: %s: %s", err, abspath))
 		return 0, -int32(unix.EACCES)
 	}
 
 	envp, err := readStringSlice(fd, ntf, env, 4096)
 	if err != nil {
-		cmd.Handler.ExecFailed(ntf.pid, int(ntf.data.nr), abspath,
-			fmt.Errorf("read envp: %s", err))
+		cmd.Handler.Failed(ntf.pid, int(ntf.data.nr),
+			fmt.Errorf("read envp: %s: %s", err, abspath))
 		return 0, -int32(unix.EACCES)
 	}
 

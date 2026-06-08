@@ -15,8 +15,6 @@ import (
 var (
 	ignoreExec = []string{}
 
-	ignoreExecFailed = []string{}
-
 	ignoreOpen = []string{
 		"/usr/lib/locale",
 	}
@@ -49,16 +47,6 @@ func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []str
 	return true
 }
 
-func (_ syscallHandler) ExecFailed(pid uint32, sysnum int, pathname string, err error) {
-	if slices.ContainsFunc(ignoreExecFailed,
-		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
-
-		return
-	}
-
-	fmt.Printf("%d: failed: %s(%s): %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
-}
-
 func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
 	mode uint32, resolve uint64) bool {
 
@@ -86,6 +74,10 @@ func (_ syscallHandler) OpenFailed(pid uint32, sysnum int, pathname string, err 
 func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {
 	fmt.Printf("%d: syscall: %s:%d\n", pid, sandbox.Sysnums[sysnum], sysnum)
 	return true
+}
+
+func (_ syscallHandler) Failed(pid uint32, sysnum int, err error) {
+	fmt.Printf("%d: failed: %s: %s\n", pid, sandbox.Sysnums[sysnum], err)
 }
 
 func main() {

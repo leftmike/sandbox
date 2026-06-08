@@ -103,8 +103,6 @@ func init() {
 		os.Exit(childRecvConfigFailed)
 	}
 
-	// XXX: mountSandbox(cfg)
-
 	err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
