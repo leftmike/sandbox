@@ -175,6 +175,4 @@ var (
 		"sysfs":       FilterConfig{Action: unix.SECCOMP_RET_ERRNO, Errno: unix.EPERM},
 		"modify_ldt":  FilterConfig{Action: unix.SECCOMP_RET_ERRNO, Errno: unix.EPERM},
 	}
-
-	defaultSockFilter = makeSockFilter(defaultFilterConfig)
 )

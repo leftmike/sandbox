@@ -20,15 +20,17 @@ const (
 	childSendmsgFailed     = 192
 	childRecvConfigFailed  = 193
 	childExecCommandFailed = 194
+	childLandlockFailed    = 195
 
 	sandboxChildArg0 = "__sandbox_child"
 )
 
 type childConfig struct {
-	Path   string
-	Args   []string
-	Env    []string
-	Filter []unix.SockFilter
+	Path     string
+	Args     []string
+	Env      []string
+	Filter   []unix.SockFilter
+	Landlock *landlockConfig
 }
 
 func recvConfig(fd int) (*childConfig, error) {
@@ -106,6 +108,12 @@ func init() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
 		os.Exit(childNoNewPrivsFailed)
+	}
+
+	err = applyLandlock(cfg.Landlock)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sandbox child: landlock: %s\n", err)
+		os.Exit(childLandlockFailed)
 	}
 
 	fd := installListener(cfg.Filter)
