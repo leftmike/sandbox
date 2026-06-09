@@ -14,13 +14,12 @@ const (
 	childSocketFd = 3
 
 	// Failure error codes from the sandbox child.
-	childBadArguments       = 189
-	childNoNewPrivsFailed   = 190
-	childNewListenerFailed  = 191
-	childSendmsgFailed      = 192
-	childRecvConfigFailed   = 193
-	childExecCommandFailed  = 194
-	childMountSandboxFailed = 195
+	childBadArguments      = 189
+	childNoNewPrivsFailed  = 190
+	childNewListenerFailed = 191
+	childSendmsgFailed     = 192
+	childRecvConfigFailed  = 193
+	childExecCommandFailed = 194
 
 	sandboxChildArg0 = "__sandbox_child"
 )

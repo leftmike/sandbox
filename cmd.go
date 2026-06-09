@@ -191,8 +191,6 @@ func (cmd *Cmd) childFailed(err error) error {
 			return errors.New("child: receiving config from sandbox failed")
 		case childExecCommandFailed:
 			return errors.New("child: executing command failed")
-		case childMountSandboxFailed:
-			return errors.New("child: mount sandbox failed")
 		}
 	}
 
