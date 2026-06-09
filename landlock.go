@@ -159,6 +159,11 @@ func applyLandlock(cfg *landlockConfig) error {
 
 		fd, err := unix.Open(rule.Path, unix.O_PATH|unix.O_CLOEXEC, 0)
 		if err != nil {
+			// A path that does not exist grants nothing; skip it so that
+			// policies (notably DefaultFSPolicy) stay portable across hosts.
+			if err == unix.ENOENT {
+				continue
+			}
 			return fmt.Errorf("landlock: open %s: %w", rule.Path, err)
 		}
 

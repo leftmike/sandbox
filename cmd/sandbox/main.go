@@ -77,6 +77,8 @@ func handleFailed(pid uint32, sysnum int, err error) {
 }
 
 func main() {
+	landlock := flag.Bool("landlock", false,
+		"restrict filesystem access with the default landlock policy")
 	flag.Parse()
 
 	args := flag.Args()
@@ -90,7 +92,7 @@ func main() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	cmd.Sandbox = &sandbox.Sandbox{
+	sb := &sandbox.Sandbox{
 		Clone:      handleClone,
 		Exec:       handleExec,
 		Open:       handleOpen,
@@ -98,6 +100,13 @@ func main() {
 		Syscall:    handleSyscall,
 		Failed:     handleFailed,
 	}
+	if *landlock {
+		if !sandbox.LandlockAvailable() {
+			log.Fatalln("landlock not supported by the running kernel")
+		}
+		sb.FS = sandbox.DefaultFSPolicy()
+	}
+	cmd.Sandbox = sb
 
 	err := cmd.Run()
 	if err != nil {

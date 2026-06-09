@@ -48,6 +48,37 @@ type FSPolicy struct {
 	Execute []string // execute (and read) access
 }
 
+// DefaultFSPolicy returns a permissive but reasonable landlock allow-list for
+// running typical dynamically-linked programs: the system binary and library
+// trees are executable and readable, common configuration and runtime locations
+// are read-only, and only scratch locations are writable. Listed paths that do
+// not exist on the host are silently ignored, so the policy is portable across
+// distributions.
+//
+// It is intentionally not applied automatically (a nil Sandbox.FS means no
+// landlock); assign it explicitly, e.g. sb.FS = sandbox.DefaultFSPolicy().
+func DefaultFSPolicy() *FSPolicy {
+	return &FSPolicy{
+		// Executables and shared libraries. Library directories need execute
+		// access too: landlock requires LANDLOCK_ACCESS_FS_EXECUTE to mmap a
+		// shared object with PROT_EXEC, which the dynamic loader does.
+		Execute: []string{
+			"/bin", "/sbin", "/usr",
+			"/lib", "/lib32", "/lib64", "/libx32",
+		},
+		// Configuration and read-only runtime state (e.g. /etc/passwd,
+		// /etc/ssl, /etc/resolv.conf, /proc/self/..., NSS data under /run).
+		Read: []string{
+			"/etc", "/opt", "/proc", "/sys", "/run", "/var",
+		},
+		// Scratch space. /dev is included so common device nodes such as
+		// /dev/null, /dev/zero, and /dev/urandom can be written as well as read.
+		Write: []string{
+			"/tmp", "/var/tmp", "/dev",
+		},
+	}
+}
+
 // LandlockAvailable reports whether the running kernel supports landlock, and
 // therefore whether an FSPolicy can be enforced.
 func LandlockAvailable() bool {

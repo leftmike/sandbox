@@ -29,6 +29,17 @@ Filesystem access is locked down with two complementary layers:
 - **seccomp** — the existing `openat`/`openat2` user-notification handler refines
   per-open decisions within that boundary.
 
+`sandbox.DefaultFSPolicy()` returns a reasonable allow-list for running typical
+dynamically-linked programs: the system binary and library trees are
+executable/readable, common config and runtime locations are read-only, and only
+scratch space (`/tmp`, `/var/tmp`, `/dev`) is writable. Listed paths that do not
+exist on the host are ignored, so it is portable across distributions. It is not
+applied automatically — assign it when you want filesystem lockdown:
+
+```go
+cmd.Sandbox = &sandbox.Sandbox{FS: sandbox.DefaultFSPolicy()}
+```
+
 Network access control is not implemented yet; it will follow the same split
 (landlock `Access_net` plus seccomp interception of `socket`/`connect`/`bind`).
 

@@ -51,6 +51,36 @@ func TestSandboxLandlockCompile(t *testing.T) {
 	}
 }
 
+func TestDefaultFSPolicy(t *testing.T) {
+	sb := &Sandbox{FS: DefaultFSPolicy()}
+
+	cfg := sb.landlock()
+	if cfg == nil {
+		t.Fatal("landlock() = nil, want config")
+	}
+
+	access := map[string]uint64{}
+	for _, r := range cfg.Rules {
+		access[r.Path] |= r.Access
+	}
+
+	// Binaries and libraries must be executable so dynamically-linked programs
+	// can run.
+	for _, p := range []string{"/bin", "/usr", "/lib"} {
+		if access[p]&unix.LANDLOCK_ACCESS_FS_EXECUTE == 0 {
+			t.Errorf("%s missing execute access: %#x", p, access[p])
+		}
+	}
+
+	// Scratch space must be writable; system config must not be.
+	if access["/tmp"]&unix.LANDLOCK_ACCESS_FS_WRITE_FILE == 0 {
+		t.Errorf("/tmp missing write access: %#x", access["/tmp"])
+	}
+	if access["/etc"]&unix.LANDLOCK_ACCESS_FS_WRITE_FILE != 0 {
+		t.Errorf("/etc unexpectedly writable: %#x", access["/etc"])
+	}
+}
+
 func TestSupportedAccessFS(t *testing.T) {
 	if supportedAccessFS(0) != 0 {
 		t.Errorf("abi 0 should report no access")
