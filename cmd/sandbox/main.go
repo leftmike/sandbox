@@ -90,12 +90,14 @@ func main() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	cmd.Clone = handleClone
-	cmd.Exec = handleExec
-	cmd.Open = handleOpen
-	cmd.OpenFailed = handleOpenFailed
-	cmd.Syscall = handleSyscall
-	cmd.Failed = handleFailed
+	cmd.Sandbox = &sandbox.Sandbox{
+		Clone:      handleClone,
+		Exec:       handleExec,
+		Open:       handleOpen,
+		OpenFailed: handleOpenFailed,
+		Syscall:    handleSyscall,
+		Failed:     handleFailed,
+	}
 
 	err := cmd.Run()
 	if err != nil {

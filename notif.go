@@ -82,7 +82,9 @@ func (cmd *Cmd) listenNotif(fd int, cancelFd int) error {
 func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_CLONE:
-		if cmd.Clone == nil || cmd.Clone(ntf.pid, int(ntf.data.nr), ntf.data.args[0]) {
+		if cmd.Sandbox.Clone == nil || cmd.Sandbox.Clone(ntf.pid, int(ntf.data.nr),
+			ntf.data.args[0]) {
+
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
@@ -94,13 +96,13 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 		}
 		buf, err := readMemory(fd, ntf, ntf.data.args[0], n)
 		if err != nil || len(buf) < 8 {
-			if cmd.Failed != nil {
-				cmd.Failed(ntf.pid, int(ntf.data.nr),
+			if cmd.Sandbox.Failed != nil {
+				cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),
 					fmt.Errorf("clone3: read flags: %s", err))
 			}
 			return 0, -int32(unix.EACCES)
 		}
-		if cmd.Clone == nil || cmd.Clone(ntf.pid, int(ntf.data.nr),
+		if cmd.Sandbox.Clone == nil || cmd.Sandbox.Clone(ntf.pid, int(ntf.data.nr),
 			binary.LittleEndian.Uint64(buf)) {
 
 			return 0, continueSyscall
@@ -123,8 +125,9 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 		var oh unix.OpenHow
 		buf, err := readMemory(fd, ntf, ntf.data.args[2], uint64(unsafe.Sizeof(oh)))
 		if err != nil || len(buf) < int(unsafe.Sizeof(oh)) {
-			if cmd.OpenFailed != nil {
-				cmd.OpenFailed(ntf.pid, int(ntf.data.nr), "", fmt.Errorf("read open_how: %s", err))
+			if cmd.Sandbox.OpenFailed != nil {
+				cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), "",
+					fmt.Errorf("read open_how: %s", err))
 			}
 			return 0, -int32(unix.EACCES)
 		}
@@ -167,8 +170,8 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 
 	dir, pathname, err := handlePath(fd, ntf, dirfd, path)
 	if err != nil {
-		if cmd.OpenFailed != nil {
-			cmd.OpenFailed(ntf.pid, int(ntf.data.nr), pathname, err)
+		if cmd.Sandbox.OpenFailed != nil {
+			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), pathname, err)
 		}
 		return 0, -int32(unix.EACCES)
 	}
@@ -179,8 +182,8 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 		var err error
 		dfd, err = unix.Open(dir, unix.O_PATH|unix.O_DIRECTORY, 0)
 		if err != nil {
-			if cmd.OpenFailed != nil {
-				cmd.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, err)
+			if cmd.Sandbox.OpenFailed != nil {
+				cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, err)
 			}
 			if errno, ok := err.(unix.Errno); ok {
 				return 0, -int32(errno)
@@ -202,8 +205,8 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 		sfd, err = unix.Openat(dfd, pathname, int(flags), uint32(mode))
 	}
 	if err != nil {
-		if cmd.OpenFailed != nil {
-			cmd.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, err)
+		if cmd.Sandbox.OpenFailed != nil {
+			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, err)
 		}
 		if errno, ok := err.(unix.Errno); ok {
 			return 0, -int32(errno)
@@ -212,8 +215,8 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	}
 	defer unix.Close(sfd)
 
-	if cmd.Open != nil && !cmd.Open(ntf.pid, int(ntf.data.nr), abspath, int32(flags),
-		uint32(mode), resolve) {
+	if cmd.Sandbox.Open != nil && !cmd.Sandbox.Open(ntf.pid, int(ntf.data.nr),
+		abspath, int32(flags), uint32(mode), resolve) {
 
 		return 0, -int32(unix.EACCES)
 	}
@@ -227,8 +230,8 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	}
 	cfd, errno := ioctlNotifAddfd(fd, addfd)
 	if errno != 0 {
-		if cmd.OpenFailed != nil {
-			cmd.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, errno)
+		if cmd.Sandbox.OpenFailed != nil {
+			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, errno)
 		}
 		return 0, -int32(errno)
 	}
@@ -244,8 +247,8 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		var err error
 		pathname, err = os.Readlink(fmt.Sprintf("/proc/%d/fd/%d", ntf.pid, dirfd))
 		if err != nil {
-			if cmd.Failed != nil {
-				cmd.Failed(ntf.pid, int(ntf.data.nr),
+			if cmd.Sandbox.Failed != nil {
+				cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),
 					fmt.Errorf("resolve dirfd (AT_EMPTY_PATH): %s", err))
 			}
 			return 0, -int32(unix.EACCES)
@@ -254,8 +257,8 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		var err error
 		dir, pathname, err = handlePath(fd, ntf, dirfd, path)
 		if err != nil {
-			if cmd.Failed != nil {
-				cmd.Failed(ntf.pid, int(ntf.data.nr), fmt.Errorf("%s: %s", err, pathname))
+			if cmd.Sandbox.Failed != nil {
+				cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr), fmt.Errorf("%s: %s", err, pathname))
 			}
 			return 0, -int32(unix.EACCES)
 		}
@@ -264,21 +267,25 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 
 	argv, err := readStringSlice(fd, ntf, args, 4096)
 	if err != nil {
-		if cmd.Failed != nil {
-			cmd.Failed(ntf.pid, int(ntf.data.nr), fmt.Errorf("read argv: %s: %s", err, abspath))
+		if cmd.Sandbox.Failed != nil {
+			cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),
+				fmt.Errorf("read argv: %s: %s", err, abspath))
 		}
 		return 0, -int32(unix.EACCES)
 	}
 
 	envp, err := readStringSlice(fd, ntf, env, 4096)
 	if err != nil {
-		if cmd.Failed != nil {
-			cmd.Failed(ntf.pid, int(ntf.data.nr), fmt.Errorf("read envp: %s: %s", err, abspath))
+		if cmd.Sandbox.Failed != nil {
+			cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),
+				fmt.Errorf("read envp: %s: %s", err, abspath))
 		}
 		return 0, -int32(unix.EACCES)
 	}
 
-	if cmd.Exec == nil || cmd.Exec(ntf.pid, int(ntf.data.nr), abspath, argv, envp) {
+	if cmd.Sandbox.Exec == nil ||
+		cmd.Sandbox.Exec(ntf.pid, int(ntf.data.nr), abspath, argv, envp) {
+
 		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)

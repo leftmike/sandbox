@@ -14,7 +14,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-
 func TestCommand(t *testing.T) {
 	cmd := sandbox.Command("/bin/echo", "hello")
 	if cmd.Path != "/bin/echo" {
@@ -240,14 +239,16 @@ func TestRunOpen(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := sandbox.Command("/bin/cat", f.Name())
 	cmd.Stdout = &buf
-	cmd.Open = func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-		resolve uint64) bool {
+	cmd.Sandbox = &sandbox.Sandbox{
+		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
 
-		if pathname == f.Name() {
-			found = true
-		}
+			if pathname == f.Name() {
+				found = true
+			}
 
-		return true
+			return true
+		},
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -262,14 +263,16 @@ func TestRunOpen(t *testing.T) {
 	}
 
 	cmd = sandbox.Command("/bin/cat", f.Name())
-	cmd.Open = func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-		resolve uint64) bool {
+	cmd.Sandbox = &sandbox.Sandbox{
+		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+			resolve uint64) bool {
 
-		if pathname == f.Name() {
-			return false
-		}
+			if pathname == f.Name() {
+				return false
+			}
 
-		return true
+			return true
+		},
 	}
 
 	ret, err = exitCode(cmd.Run())
@@ -285,12 +288,14 @@ func TestRunExec(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
-	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-		if pathname == "/bin/echo" {
-			found = true
-		}
+	cmd.Sandbox = &sandbox.Sandbox{
+		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			if pathname == "/bin/echo" {
+				found = true
+			}
 
-		return true
+			return true
+		},
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -307,12 +312,14 @@ func TestRunExec(t *testing.T) {
 	buf.Reset()
 	cmd = sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
-	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-		if pathname == "/bin/echo" {
-			return false
-		}
+	cmd.Sandbox = &sandbox.Sandbox{
+		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			if pathname == "/bin/echo" {
+				return false
+			}
 
-		return true
+			return true
+		},
 	}
 
 	ret, err = exitCode(cmd.Run())
@@ -330,11 +337,13 @@ func TestRunExecArgv(t *testing.T) {
 	cmd := sandbox.Command(want[0], want[1:]...)
 
 	var gotArgv []string
-	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-		if pathname == "/bin/echo" {
-			gotArgv = argv
-		}
-		return true
+	cmd.Sandbox = &sandbox.Sandbox{
+		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			if pathname == "/bin/echo" {
+				gotArgv = argv
+			}
+			return true
+		},
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -353,11 +362,13 @@ func TestRunExecEnv(t *testing.T) {
 	cmd.Env = wantEnv
 
 	var gotEnv []string
-	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-		if pathname == "/bin/true" {
-			gotEnv = env
-		}
-		return true
+	cmd.Sandbox = &sandbox.Sandbox{
+		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+			if pathname == "/bin/true" {
+				gotEnv = env
+			}
+			return true
+		},
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -384,11 +395,13 @@ t.join()
 `
 	var threadCloned bool
 	cmd := sandbox.Command(python, "-c", script)
-	cmd.Clone = func(pid uint32, sysnum int, flags uint64) bool {
-		if flags&unix.CLONE_THREAD != 0 {
-			threadCloned = true
-		}
-		return true
+	cmd.Sandbox = &sandbox.Sandbox{
+		Clone: func(pid uint32, sysnum int, flags uint64) bool {
+			if flags&unix.CLONE_THREAD != 0 {
+				threadCloned = true
+			}
+			return true
+		},
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -404,9 +417,11 @@ t.join()
 func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := sandbox.Command("/bin/sh", "-c", "/bin/true")
-	cmd.Clone = func(pid uint32, sysnum int, flags uint64) bool {
-		cloned = true
-		return true
+	cmd.Sandbox = &sandbox.Sandbox{
+		Clone: func(pid uint32, sysnum int, flags uint64) bool {
+			cloned = true
+			return true
+		},
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -419,8 +434,10 @@ func TestRunClone(t *testing.T) {
 	}
 
 	cmd = sandbox.Command("/bin/sh", "-c", "/bin/true")
-	cmd.Clone = func(pid uint32, sysnum int, flags uint64) bool {
-		return false
+	cmd.Sandbox = &sandbox.Sandbox{
+		Clone: func(pid uint32, sysnum int, flags uint64) bool {
+			return false
+		},
 	}
 
 	ret, err = exitCode(cmd.Run())

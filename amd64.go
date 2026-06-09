@@ -13,7 +13,7 @@ const (
 func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
 	switch ntf.data.nr {
 	case unix.SYS_FORK, unix.SYS_VFORK:
-		if cmd.Clone == nil || cmd.Clone(ntf.pid, int(ntf.data.nr), 0) {
+		if cmd.Sandbox.Clone == nil || cmd.Sandbox.Clone(ntf.pid, int(ntf.data.nr), 0) {
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
@@ -23,7 +23,7 @@ func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
 			ntf.data.args[2], 0)
 
 	default:
-		if cmd.Syscall == nil || cmd.Syscall(ntf.pid, int(ntf.data.nr)) {
+		if cmd.Sandbox.Syscall == nil || cmd.Sandbox.Syscall(ntf.pid, int(ntf.data.nr)) {
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
