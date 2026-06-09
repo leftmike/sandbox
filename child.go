@@ -90,8 +90,6 @@ func init() {
 		return
 	}
 
-	runtime.LockOSThread()
-
 	if !isSocketFd(childSocketFd) {
 		fmt.Fprintf(os.Stderr, "sandbox child: not a socket: fd %d\n", childSocketFd)
 		os.Exit(childBadArguments)
@@ -109,32 +107,57 @@ func init() {
 		os.Exit(childRecvConfigFailed)
 	}
 
-	err = unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
-		os.Exit(childNoNewPrivsFailed)
-	}
+	// The seccomp filter traps sendmsg, sendto, and sendmmsg so that socket
+	// sends can be reported. The listener-fd handoff below also uses sendmsg,
+	// and it would deadlock if it were trapped: the sandbox monitor cannot
+	// service the notification until it has received the very fd being sent.
+	//
+	// The filter is installed without SECCOMP_FILTER_FLAG_TSYNC, so it applies
+	// only to the thread that installs it. We therefore install the filter and
+	// exec the command on a dedicated locked thread, and send the listener fd
+	// to the monitor from this (unfiltered) thread. Because the locked
+	// goroutine owns its thread exclusively, this goroutine runs on a different
+	// thread and its sendmsg is not trapped. The exec inherits the filter from
+	// the locked thread, and threads later created by the command inherit it in
+	// turn.
+	fdCh := make(chan int)
+	sentCh := make(chan struct{})
+	go func() {
+		runtime.LockOSThread()
 
-	if cfg.FSP != nil && !cfg.NoLandlock {
-		err = landlockApplyFSPolicy(cfg.FSP, cfg.WriteAccess, cfg.ExecuteOnly)
+		err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "sandbox child: landlock: %s\n", err)
-			os.Exit(childLandlockFailed)
+			fmt.Fprintf(os.Stderr, "sandbox child: prctl(PR_SET_NO_NEW_PRIVS): %s\n", err)
+			os.Exit(childNoNewPrivsFailed)
 		}
-	}
 
-	fd := installListener(cfg.Filter)
-	unix.CloseOnExec(fd)
+		if cfg.FSP != nil && !cfg.NoLandlock {
+			err = landlockApplyFSPolicy(cfg.FSP, cfg.WriteAccess, cfg.ExecuteOnly)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "sandbox child: landlock: %s\n", err)
+				os.Exit(childLandlockFailed)
+			}
+		}
 
+		fd := installListener(cfg.Filter)
+		unix.CloseOnExec(fd)
+		fdCh <- fd
+
+		<-sentCh
+		err = unix.Exec(cfg.Path, cfg.Args, cfg.Env)
+		fmt.Fprintf(os.Stderr, "sandbox child: exec(%v): %s\n", cfg.Path, err)
+		os.Exit(childExecCommandFailed)
+	}()
+
+	fd := <-fdCh
 	err = unix.Sendmsg(childSocketFd, nil, unix.UnixRights(fd), nil, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sandbox child: sendmsg: %s\n", err)
 		os.Exit(childSendmsgFailed)
 	}
+	close(sentCh)
 
-	err = unix.Exec(cfg.Path, cfg.Args, cfg.Env)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sandbox child: exec(%v): %s\n", cfg.Path, err)
-		os.Exit(childExecCommandFailed)
-	}
+	// Block forever: the locked goroutine execs over this process. Returning
+	// from init would let the (unsandboxed) Go program continue running.
+	select {}
 }

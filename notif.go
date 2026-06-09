@@ -146,6 +146,15 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 	case unix.SYS_BIND:
 		return cmd.handleBind(fd, ntf)
 
+	case unix.SYS_SENDTO:
+		return cmd.handleSendto(fd, ntf)
+
+	case unix.SYS_SENDMSG:
+		return cmd.handleSendmsg(fd, ntf)
+
+	case unix.SYS_SENDMMSG:
+		return cmd.handleSendmmsg(fd, ntf)
+
 	default:
 		return cmd.handleNotifArch(fd, ntf)
 	}

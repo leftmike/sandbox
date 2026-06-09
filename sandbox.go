@@ -37,6 +37,14 @@ type Sandbox struct {
 	// Returning false denies the call with EACCES. Binds to other address
 	// families (such as AF_UNIX) are allowed without calling Bind.
 	Bind func(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool
+	// Sendto is called when the process sends a datagram to an explicit
+	// AF_INET or AF_INET6 destination address via sendto(2), sendmsg(2), or
+	// sendmmsg(2) -- that is, on an unconnected socket. sockfd is the socket
+	// file descriptor in the process. Returning false denies the send with
+	// EACCES. Sends with no destination address (connected sockets) and sends
+	// to other address families (such as AF_UNIX) are allowed without calling
+	// Sendto.
+	Sendto func(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool
 
 	Syscall func(pid uint32, sysnum int) bool
 	Failed  func(pid uint32, sysnum int, err error)

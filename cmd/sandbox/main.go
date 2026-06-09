@@ -82,6 +82,11 @@ func handleBind(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool {
 	return true
 }
 
+func handleSendto(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool {
+	fmt.Printf("%d: %s(%d, %s)\n", pid, sandbox.Sysnums[sysnum], sockfd, addr)
+	return true
+}
+
 func handleSyscall(pid uint32, sysnum int) bool {
 	fmt.Printf("%d: syscall: %s:%d\n", pid, sandbox.Sysnums[sysnum], sysnum)
 	return true
@@ -135,6 +140,7 @@ func main() {
 		Socket:     handleSocket,
 		Connect:    handleConnect,
 		Bind:       handleBind,
+		Sendto:     handleSendto,
 		Syscall:    handleSyscall,
 		Failed:     handleFailed,
 	}
