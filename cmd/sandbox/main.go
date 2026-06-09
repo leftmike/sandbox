@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"slices"
@@ -66,6 +67,21 @@ func handleOpenFailed(pid uint32, sysnum int, pathname string, err error) {
 	fmt.Printf("%d: failed: %s(%s): %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
 }
 
+func handleSocket(pid uint32, sysnum int, domain, typ, protocol int) bool {
+	fmt.Printf("%d: %s(%d, %d, %d)\n", pid, sandbox.Sysnums[sysnum], domain, typ, protocol)
+	return true
+}
+
+func handleConnect(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool {
+	fmt.Printf("%d: %s(%d, %s)\n", pid, sandbox.Sysnums[sysnum], sockfd, addr)
+	return true
+}
+
+func handleBind(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool {
+	fmt.Printf("%d: %s(%d, %s)\n", pid, sandbox.Sysnums[sysnum], sockfd, addr)
+	return true
+}
+
 func handleSyscall(pid uint32, sysnum int) bool {
 	fmt.Printf("%d: syscall: %s:%d\n", pid, sandbox.Sysnums[sysnum], sysnum)
 	return true
@@ -116,6 +132,9 @@ func main() {
 		Exec:       handleExec,
 		Open:       handleOpen,
 		OpenFailed: handleOpenFailed,
+		Socket:     handleSocket,
+		Connect:    handleConnect,
+		Bind:       handleBind,
 		Syscall:    handleSyscall,
 		Failed:     handleFailed,
 	}

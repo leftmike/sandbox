@@ -72,6 +72,11 @@ func DefaultFilterConfig() map[string]FilterConfig {
 		"openat2":  {Action: unix.SECCOMP_RET_USER_NOTIF},
 		"vfork":    {Action: unix.SECCOMP_RET_USER_NOTIF},
 
+		// TCP and UDP socket events.
+		"socket":  {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"connect": {Action: unix.SECCOMP_RET_USER_NOTIF},
+		"bind":    {Action: unix.SECCOMP_RET_USER_NOTIF},
+
 		// No pathname is available from the file handle; deny unconditionally.
 		"open_by_handle_at": {Action: unix.SECCOMP_RET_KILL_PROCESS},
 

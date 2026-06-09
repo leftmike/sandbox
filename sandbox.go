@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"net/netip"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -19,8 +20,26 @@ type Sandbox struct {
 	Open  func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 		resolve uint64) bool
 	OpenFailed func(pid uint32, sysnum int, pathname string, err error)
-	Syscall    func(pid uint32, sysnum int) bool
-	Failed     func(pid uint32, sysnum int, err error)
+
+	// Socket is called when the process creates an AF_INET or AF_INET6 socket
+	// via socket(2). typ has the SOCK_CLOEXEC and SOCK_NONBLOCK flags masked
+	// off, so it is one of SOCK_STREAM (TCP), SOCK_DGRAM (UDP), etc. Returning
+	// false denies the call with EACCES. Sockets in other domains (such as
+	// AF_UNIX) are allowed without calling Socket.
+	Socket func(pid uint32, sysnum int, domain, typ, protocol int) bool
+	// Connect is called when the process connects an AF_INET or AF_INET6 socket
+	// to addr via connect(2). sockfd is the socket file descriptor in the
+	// process. Returning false denies the call with EACCES. Connects to other
+	// address families (such as AF_UNIX) are allowed without calling Connect.
+	Connect func(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool
+	// Bind is called when the process binds an AF_INET or AF_INET6 socket to
+	// addr via bind(2). sockfd is the socket file descriptor in the process.
+	// Returning false denies the call with EACCES. Binds to other address
+	// families (such as AF_UNIX) are allowed without calling Bind.
+	Bind func(pid uint32, sysnum int, sockfd int, addr netip.AddrPort) bool
+
+	Syscall func(pid uint32, sysnum int) bool
+	Failed  func(pid uint32, sysnum int, err error)
 
 	Mode       Mode
 	Filter     map[string]FilterConfig

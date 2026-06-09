@@ -137,6 +137,15 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 		return cmd.handleOpenat(fd, ntf, int32(ntf.data.args[0]), ntf.data.args[1], oh.Flags,
 			oh.Mode, oh.Resolve)
 
+	case unix.SYS_SOCKET:
+		return cmd.handleSocket(ntf)
+
+	case unix.SYS_CONNECT:
+		return cmd.handleConnect(fd, ntf)
+
+	case unix.SYS_BIND:
+		return cmd.handleBind(fd, ntf)
+
 	default:
 		return cmd.handleNotifArch(fd, ntf)
 	}
