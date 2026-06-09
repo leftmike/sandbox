@@ -21,15 +21,13 @@ func TestOpenatAbsolute(t *testing.T) {
 
 	var found bool
 	cmd := sandbox.Command("/bin/cat", want)
-	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-			resolve uint64) bool {
+	cmd.Open = func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+		resolve uint64) bool {
 
-			if pathname == want {
-				found = true
-			}
-			return true
-		},
+		if pathname == want {
+			found = true
+		}
+		return true
 	}
 	err = cmd.Run()
 	if err != nil {
@@ -52,15 +50,13 @@ func TestOpenatATFDCWD(t *testing.T) {
 	var found bool
 	cmd := sandbox.Command("/bin/cat", name)
 	cmd.Dir = dir
-	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-			resolve uint64) bool {
+	cmd.Open = func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+		resolve uint64) bool {
 
-			if pathname == want {
-				found = true
-			}
-			return true
-		},
+		if pathname == want {
+			found = true
+		}
+		return true
 	}
 	err = cmd.Run()
 	if err != nil {
@@ -99,15 +95,13 @@ os.close(dirfd)
 `
 	var found bool
 	cmd := sandbox.Command(python, "-c", script, dir, name)
-	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-			resolve uint64) bool {
+	cmd.Open = func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+		resolve uint64) bool {
 
-			if pathname == want {
-				found = true
-			}
-			return true
-		},
+		if pathname == want {
+			found = true
+		}
+		return true
 	}
 	err = cmd.Run()
 	if err != nil {
@@ -150,13 +144,11 @@ func TestExecveatRelative(t *testing.T) {
 
 	var found bool
 	cmd := sandbox.Command(python, "-c", script)
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			if pathname == truePath {
-				found = true
-			}
-			return true
-		},
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		if pathname == truePath {
+			found = true
+		}
+		return true
 	}
 	if err := cmd.Run(); err != nil {
 		t.Errorf("Run() failed: %s", err)
@@ -165,10 +157,8 @@ func TestExecveatRelative(t *testing.T) {
 	}
 
 	cmd = sandbox.Command(python, "-c", script)
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			return pathname != truePath
-		},
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		return pathname != truePath
 	}
 	ret, err := exitCode(cmd.Run())
 	if err != nil {
@@ -196,13 +186,11 @@ func TestExecveatATEmptyPath(t *testing.T) {
 
 	var found bool
 	cmd := sandbox.Command(python, "-c", script)
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			if pathname == truePath {
-				found = true
-			}
-			return true
-		},
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		if pathname == truePath {
+			found = true
+		}
+		return true
 	}
 	if err := cmd.Run(); err != nil {
 		t.Errorf("Run() failed: %s", err)
@@ -211,10 +199,8 @@ func TestExecveatATEmptyPath(t *testing.T) {
 	}
 
 	cmd = sandbox.Command(python, "-c", script)
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			return pathname != truePath
-		},
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		return pathname != truePath
 	}
 	ret, err := exitCode(cmd.Run())
 	if err != nil {

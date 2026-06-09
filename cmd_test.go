@@ -14,63 +14,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type testHandler struct {
-	clone func(pid uint32, sysnum int, flags uint64) bool
-	exec  func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
-	open  func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-		resolve uint64) bool
-	openFailed func(pid uint32, sysnum int, pathname string, err error)
-	syscall    func(pid uint32, sysnum int) bool
-	failed     func(pid uint32, sysnum int, err error)
-}
-
-func (th testHandler) Clone(pid uint32, sysnum int, flags uint64) bool {
-	if th.clone != nil {
-		return th.clone(pid, sysnum, flags)
-	}
-
-	return true
-}
-
-func (th testHandler) Exec(pid uint32, sysnum int, pathname string, argv []string,
-	env []string) bool {
-
-	if th.exec != nil {
-		return th.exec(pid, sysnum, pathname, argv, env)
-	}
-
-	return true
-}
-
-func (th testHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
-	mode uint32, resolve uint64) bool {
-
-	if th.open != nil {
-		return th.open(pid, sysnum, pathname, flags, mode, resolve)
-	}
-
-	return true
-}
-
-func (th testHandler) OpenFailed(pid uint32, sysnum int, pathname string, err error) {
-	if th.openFailed != nil {
-		th.openFailed(pid, sysnum, pathname, err)
-	}
-}
-
-func (th testHandler) Syscall(pid uint32, sysnum int) bool {
-	if th.syscall != nil {
-		return th.syscall(pid, sysnum)
-	}
-
-	return true
-}
-
-func (th testHandler) Failed(pid uint32, sysnum int, err error) {
-	if th.failed != nil {
-		th.failed(pid, sysnum, err)
-	}
-}
 
 func TestCommand(t *testing.T) {
 	cmd := sandbox.Command("/bin/echo", "hello")
@@ -89,13 +32,11 @@ func TestCommandContext(t *testing.T) {
 
 func TestCmdRun(t *testing.T) {
 	cmd := sandbox.Command("/bin/true")
-	cmd.Handler = testHandler{}
 	if err := cmd.Run(); err != nil {
 		t.Errorf("Run(/bin/true) = %v, want nil", err)
 	}
 
 	cmd = sandbox.Command("/bin/false")
-	cmd.Handler = testHandler{}
 	if err := cmd.Run(); err == nil {
 		t.Error("Run(/bin/false) = nil, want error")
 	}
@@ -103,7 +44,6 @@ func TestCmdRun(t *testing.T) {
 
 func TestCmdOutput(t *testing.T) {
 	cmd := sandbox.Command("/bin/echo", "hello")
-	cmd.Handler = testHandler{}
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("Output() error: %v", err)
@@ -124,7 +64,6 @@ func TestCmdOutputStdoutAlreadySet(t *testing.T) {
 
 func TestCmdCombinedOutput(t *testing.T) {
 	cmd := sandbox.Command("/bin/echo", "hello")
-	cmd.Handler = testHandler{}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CombinedOutput() error: %v", err)
@@ -169,7 +108,6 @@ func TestCmdEnviron(t *testing.T) {
 
 func TestCmdEnvironPassthrough(t *testing.T) {
 	cmd := sandbox.Command("/bin/sh", "-c", "/usr/bin/echo $FOO")
-	cmd.Handler = testHandler{}
 	cmd.Env = []string{"FOO=hello"}
 	out, err := cmd.Output()
 	if err != nil {
@@ -189,7 +127,6 @@ func TestCmdString(t *testing.T) {
 
 func TestCmdStdoutPipe(t *testing.T) {
 	cmd := sandbox.Command("/usr/bin/echo", "hello")
-	cmd.Handler = testHandler{}
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatalf("StdoutPipe() error: %v", err)
@@ -211,7 +148,6 @@ func TestCmdStdoutPipe(t *testing.T) {
 
 func TestCmdStderrPipe(t *testing.T) {
 	cmd := sandbox.Command("/bin/sh", "-c", "/usr/bin/echo error >&2")
-	cmd.Handler = testHandler{}
 	pipe, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatalf("StderrPipe() error: %v", err)
@@ -233,7 +169,6 @@ func TestCmdStderrPipe(t *testing.T) {
 
 func TestCmdStdinPipe(t *testing.T) {
 	cmd := sandbox.Command("/bin/cat")
-	cmd.Handler = testHandler{}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("StdinPipe() error: %v", err)
@@ -282,7 +217,6 @@ func TestRun(t *testing.T) {
 
 	for _, c := range cases {
 		cmd := sandbox.Command(c.cmd)
-		cmd.Handler = testHandler{}
 
 		ret, err := exitCode(cmd.Run())
 		if err != nil {
@@ -306,16 +240,14 @@ func TestRunOpen(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := sandbox.Command("/bin/cat", f.Name())
 	cmd.Stdout = &buf
-	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-			resolve uint64) bool {
+	cmd.Open = func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+		resolve uint64) bool {
 
-			if pathname == f.Name() {
-				found = true
-			}
+		if pathname == f.Name() {
+			found = true
+		}
 
-			return true
-		},
+		return true
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -330,16 +262,14 @@ func TestRunOpen(t *testing.T) {
 	}
 
 	cmd = sandbox.Command("/bin/cat", f.Name())
-	cmd.Handler = testHandler{
-		open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
-			resolve uint64) bool {
+	cmd.Open = func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+		resolve uint64) bool {
 
-			if pathname == f.Name() {
-				return false
-			}
+		if pathname == f.Name() {
+			return false
+		}
 
-			return true
-		},
+		return true
 	}
 
 	ret, err = exitCode(cmd.Run())
@@ -355,14 +285,12 @@ func TestRunExec(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			if pathname == "/bin/echo" {
-				found = true
-			}
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		if pathname == "/bin/echo" {
+			found = true
+		}
 
-			return true
-		},
+		return true
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -379,14 +307,12 @@ func TestRunExec(t *testing.T) {
 	buf.Reset()
 	cmd = sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			if pathname == "/bin/echo" {
-				return false
-			}
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		if pathname == "/bin/echo" {
+			return false
+		}
 
-			return true
-		},
+		return true
 	}
 
 	ret, err = exitCode(cmd.Run())
@@ -404,13 +330,11 @@ func TestRunExecArgv(t *testing.T) {
 	cmd := sandbox.Command(want[0], want[1:]...)
 
 	var gotArgv []string
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			if pathname == "/bin/echo" {
-				gotArgv = argv
-			}
-			return true
-		},
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		if pathname == "/bin/echo" {
+			gotArgv = argv
+		}
+		return true
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -429,13 +353,11 @@ func TestRunExecEnv(t *testing.T) {
 	cmd.Env = wantEnv
 
 	var gotEnv []string
-	cmd.Handler = testHandler{
-		exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			if pathname == "/bin/true" {
-				gotEnv = env
-			}
-			return true
-		},
+	cmd.Exec = func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+		if pathname == "/bin/true" {
+			gotEnv = env
+		}
+		return true
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -462,13 +384,11 @@ t.join()
 `
 	var threadCloned bool
 	cmd := sandbox.Command(python, "-c", script)
-	cmd.Handler = testHandler{
-		clone: func(pid uint32, sysnum int, flags uint64) bool {
-			if flags&unix.CLONE_THREAD != 0 {
-				threadCloned = true
-			}
-			return true
-		},
+	cmd.Clone = func(pid uint32, sysnum int, flags uint64) bool {
+		if flags&unix.CLONE_THREAD != 0 {
+			threadCloned = true
+		}
+		return true
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -484,11 +404,9 @@ t.join()
 func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := sandbox.Command("/bin/sh", "-c", "/bin/true")
-	cmd.Handler = testHandler{
-		clone: func(pid uint32, sysnum int, flags uint64) bool {
-			cloned = true
-			return true
-		},
+	cmd.Clone = func(pid uint32, sysnum int, flags uint64) bool {
+		cloned = true
+		return true
 	}
 
 	ret, err := exitCode(cmd.Run())
@@ -501,10 +419,8 @@ func TestRunClone(t *testing.T) {
 	}
 
 	cmd = sandbox.Command("/bin/sh", "-c", "/bin/true")
-	cmd.Handler = testHandler{
-		clone: func(pid uint32, sysnum int, flags uint64) bool {
-			return false
-		},
+	cmd.Clone = func(pid uint32, sysnum int, flags uint64) bool {
+		return false
 	}
 
 	ret, err = exitCode(cmd.Run())

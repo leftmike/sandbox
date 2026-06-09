@@ -11,7 +11,7 @@ const (
 )
 
 func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
-	if cmd.Handler.Syscall(ntf.pid, int(ntf.data.nr)) {
+	if cmd.Syscall == nil || cmd.Syscall(ntf.pid, int(ntf.data.nr)) {
 		return 0, continueSyscall
 	}
 	return 0, -int32(unix.EACCES)

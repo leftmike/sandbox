@@ -12,19 +12,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type Handler interface {
-	Clone(pid uint32, sysnum int, flags uint64) bool
-	Exec(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
-	Open(pid uint32, sysnum int, pathname string, flags int32, mode uint32, resolve uint64) bool
-	OpenFailed(pid uint32, sysnum int, pathname string, err error)
-	Syscall(pid uint32, sysnum int) bool
-	Failed(pid uint32, sysnum int, err error)
-}
-
 type Cmd struct {
 	exec.Cmd
 
-	Handler Handler
+	Clone func(pid uint32, sysnum int, flags uint64) bool
+	Exec  func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
+	Open  func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+		resolve uint64) bool
+	OpenFailed func(pid uint32, sysnum int, pathname string, err error)
+	Syscall    func(pid uint32, sysnum int) bool
+	Failed     func(pid uint32, sysnum int, err error)
 
 	closeFd int
 	waitCh  chan error
@@ -92,10 +89,6 @@ func (cmd *Cmd) Run() error {
 }
 
 func (cmd *Cmd) Start() (err error) {
-	if cmd.Handler == nil {
-		panic("sandbox: no handler")
-	}
-
 	path, err := os.Executable()
 	if err != nil {
 		return err

@@ -24,16 +24,12 @@ var (
 	}
 )
 
-type syscallHandler struct{}
-
-func (_ syscallHandler) Clone(pid uint32, sysnum int, flags uint64) bool {
+func handleClone(pid uint32, sysnum int, flags uint64) bool {
 	fmt.Printf("%d: %s(%x)\n", pid, sandbox.Sysnums[sysnum], flags)
 	return true
 }
 
-func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []string,
-	env []string) bool {
-
+func handleExec(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 	if slices.ContainsFunc(ignoreExec,
 		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
 
@@ -47,8 +43,8 @@ func (_ syscallHandler) Exec(pid uint32, sysnum int, pathname string, argv []str
 	return true
 }
 
-func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int32,
-	mode uint32, resolve uint64) bool {
+func handleOpen(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
+	resolve uint64) bool {
 
 	if slices.ContainsFunc(ignoreOpen,
 		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
@@ -56,12 +52,12 @@ func (_ syscallHandler) Open(pid uint32, sysnum int, pathname string, flags int3
 		return true
 	}
 
-	fmt.Printf("%d: %s(%s, %x, %x, %x)\n", pid, sandbox.Sysnums[sysnum], pathname, flags, mode,
-		resolve)
+	fmt.Printf("%d: %s(%s, %x, %x, %x)\n", pid, sandbox.Sysnums[sysnum], pathname, flags,
+		mode, resolve)
 	return true
 }
 
-func (_ syscallHandler) OpenFailed(pid uint32, sysnum int, pathname string, err error) {
+func handleOpenFailed(pid uint32, sysnum int, pathname string, err error) {
 	if slices.ContainsFunc(ignoreOpenFailed,
 		func(s string) bool { return strings.HasPrefix(pathname, s) }) {
 
@@ -71,12 +67,12 @@ func (_ syscallHandler) OpenFailed(pid uint32, sysnum int, pathname string, err 
 	fmt.Printf("%d: failed: %s(%s): %s\n", pid, sandbox.Sysnums[sysnum], pathname, err)
 }
 
-func (_ syscallHandler) Syscall(pid uint32, sysnum int) bool {
+func handleSyscall(pid uint32, sysnum int) bool {
 	fmt.Printf("%d: syscall: %s:%d\n", pid, sandbox.Sysnums[sysnum], sysnum)
 	return true
 }
 
-func (_ syscallHandler) Failed(pid uint32, sysnum int, err error) {
+func handleFailed(pid uint32, sysnum int, err error) {
 	fmt.Printf("%d: failed: %s: %s\n", pid, sandbox.Sysnums[sysnum], err)
 }
 
@@ -90,10 +86,16 @@ func main() {
 
 	fmt.Println(args)
 	cmd := sandbox.Command(args[0], args[1:]...)
-	cmd.Handler = syscallHandler{}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	cmd.Clone = handleClone
+	cmd.Exec = handleExec
+	cmd.Open = handleOpen
+	cmd.OpenFailed = handleOpenFailed
+	cmd.Syscall = handleSyscall
+	cmd.Failed = handleFailed
 
 	err := cmd.Run()
 	if err != nil {
