@@ -2,7 +2,6 @@ package sandbox
 
 import (
 	"fmt"
-	"maps"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -58,11 +57,7 @@ func makeSockFilter(cfg map[string]FilterConfig) []unix.SockFilter {
 }
 
 func DefaultFilterConfig() map[string]FilterConfig {
-	return maps.Clone(defaultFilterConfig)
-}
-
-var (
-	defaultFilterConfig = map[string]FilterConfig{
+	return map[string]FilterConfig{
 		"clone":    {Action: unix.SECCOMP_RET_USER_NOTIF},
 		"clone3":   {Action: unix.SECCOMP_RET_USER_NOTIF},
 		"execve":   {Action: unix.SECCOMP_RET_USER_NOTIF},
@@ -175,6 +170,4 @@ var (
 		"sysfs":       FilterConfig{Action: unix.SECCOMP_RET_ERRNO, Errno: unix.EPERM},
 		"modify_ldt":  FilterConfig{Action: unix.SECCOMP_RET_ERRNO, Errno: unix.EPERM},
 	}
-
-	defaultSockFilter = makeSockFilter(defaultFilterConfig)
-)
+}

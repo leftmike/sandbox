@@ -86,6 +86,12 @@ func (cmd *Cmd) Start() (err error) {
 	if cmd.Sandbox == nil {
 		cmd.Sandbox = &Sandbox{}
 	}
+	if cmd.Sandbox.Filter == nil {
+		cmd.Sandbox.Filter = DefaultFilterConfig()
+	}
+	if cmd.Sandbox.FS == nil {
+		cmd.Sandbox.FS = DefaultFSPolicy()
+	}
 
 	path, err := os.Executable()
 	if err != nil {
@@ -121,7 +127,7 @@ func (cmd *Cmd) Start() (err error) {
 		Path:   cmd.Path,
 		Args:   cmd.Args,
 		Env:    cmd.Env,
-		Filter: defaultSockFilter,
+		Filter: makeSockFilter(cmd.Sandbox.Filter),
 	}
 
 	cmd.Path = path
