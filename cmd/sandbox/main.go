@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"slices"
@@ -81,7 +80,8 @@ func main() {
 
 	args := flag.Args()
 	if len(args) < 1 {
-		log.Fatalln("missing command to sandbox")
+		fmt.Fprintf(os.Stderr, "%s: missing command to sandbox", os.Args[0])
+		os.Exit(1)
 	}
 
 	fmt.Println(args)

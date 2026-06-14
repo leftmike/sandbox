@@ -124,10 +124,19 @@ func (cmd *Cmd) Start() (err error) {
 
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
-		Path:   cmd.Path,
-		Args:   cmd.Args,
-		Env:    cmd.Env,
-		Filter: makeSockFilter(cmd.Sandbox.Filter),
+		Path:        cmd.Path,
+		Args:        cmd.Args,
+		Env:         cmd.Env,
+		Filter:      makeSockFilter(cmd.Sandbox.Filter),
+		WriteAccess: landlockWriteAccess,
+	}
+
+	if !cmd.Sandbox.NoLandlock {
+		if !landlockSupported {
+			return errors.New("landlock not supported by kernel")
+		}
+
+		cfg.FS = cmd.Sandbox.FS
 	}
 
 	cmd.Path = path
@@ -197,6 +206,8 @@ func (cmd *Cmd) childFailed(err error) error {
 			return errors.New("child: receiving config from sandbox failed")
 		case childExecCommandFailed:
 			return errors.New("child: executing command failed")
+		case childLandlockFailed:
+			return errors.New("child: landlock failed")
 		}
 	}
 
