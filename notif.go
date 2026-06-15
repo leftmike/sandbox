@@ -215,8 +215,23 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	}
 	defer unix.Close(sfd)
 
+	realpath, err := os.Readlink(fmt.Sprintf("/proc/self/fd/%d", sfd))
+	if err != nil {
+		if cmd.Sandbox.OpenFailed != nil {
+			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, err)
+		}
+		return 0, -int32(unix.EACCES)
+	}
+
+	if !cmd.Sandbox.fsAllows(realpath, flags) {
+		if cmd.Sandbox.OpenFailed != nil {
+			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), realpath, unix.EACCES)
+		}
+		return 0, -int32(unix.EACCES)
+	}
+
 	if cmd.Sandbox.Open != nil && !cmd.Sandbox.Open(ntf.pid, int(ntf.data.nr),
-		abspath, int32(flags), uint32(mode), resolve) {
+		realpath, int32(flags), uint32(mode), resolve) {
 
 		return 0, -int32(unix.EACCES)
 	}
@@ -231,7 +246,7 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	cfd, errno := ioctlNotifAddfd(fd, addfd)
 	if errno != 0 {
 		if cmd.Sandbox.OpenFailed != nil {
-			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), abspath, errno)
+			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), realpath, errno)
 		}
 		return 0, -int32(errno)
 	}

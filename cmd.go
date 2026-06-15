@@ -132,7 +132,7 @@ func (cmd *Cmd) Start() (err error) {
 	}
 
 	if !cmd.Sandbox.NoLandlock {
-		if !landlockSupported {
+		if !LandlockSupported {
 			return errors.New("landlock not supported by kernel")
 		}
 

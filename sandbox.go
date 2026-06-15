@@ -1,5 +1,12 @@
 package sandbox
 
+import (
+	"path/filepath"
+	"strings"
+
+	"golang.org/x/sys/unix"
+)
+
 type Sandbox struct {
 	Clone func(pid uint32, sysnum int, flags uint64) bool
 	Exec  func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
@@ -21,6 +28,37 @@ type FSPolicy struct {
 	Read    []string // read-only access
 	Write   []string // read-write access (create, remove, truncate, ...)
 	Execute []string // execute (and read) access
+}
+
+// XXX: if base ends with / then strings.HasPrefix will work
+// XXX: add -no-open-proxy flag to main and Sandbox to disable open proxying
+func pathBeneath(base, target string) bool {
+	rel, err := filepath.Rel(base, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || !strings.HasPrefix(rel, "..")
+}
+
+// XXX: rename realpath to path
+func pathsAllows(realpath string, paths []string) bool {
+	for _, path := range paths {
+		if pathBeneath(path, realpath) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// XXX: rename realpath to path
+func (sb *Sandbox) fsAllows(realpath string, flags uint64) bool {
+	if flags&unix.O_ACCMODE != unix.O_RDONLY || flags&(unix.O_CREAT|unix.O_TRUNC) != 0 {
+		return pathsAllows(realpath, sb.FS.Write)
+	}
+
+	return pathsAllows(realpath, sb.FS.Read) || pathsAllows(realpath, sb.FS.Execute) ||
+		pathsAllows(realpath, sb.FS.Write)
 }
 
 func DefaultFSPolicy() *FSPolicy {

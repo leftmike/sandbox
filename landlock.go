@@ -18,7 +18,7 @@ const (
 
 var (
 	landlockWriteAccess uint64
-	landlockSupported   bool
+	LandlockSupported   bool
 )
 
 func init() {
@@ -26,9 +26,9 @@ func init() {
 		unix.LANDLOCK_CREATE_RULESET_VERSION)
 	ver := int(n)
 	if errno != 0 || ver < 1 {
-		landlockSupported = false
+		LandlockSupported = false
 	} else {
-		landlockSupported = true
+		LandlockSupported = true
 
 		landlockWriteAccess = unix.LANDLOCK_ACCESS_FS_READ_FILE |
 			unix.LANDLOCK_ACCESS_FS_WRITE_FILE |
