@@ -76,6 +76,7 @@ func handleFailed(pid uint32, sysnum int, err error) {
 }
 
 func main() {
+	vm := flag.Bool("vm", false, "run the command in a KVM micro-VM (ModeVM) instead of seccomp+Landlock")
 	flag.Parse()
 
 	args := flag.Args()
@@ -90,13 +91,20 @@ func main() {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	cmd.Sandbox = &sandbox.Sandbox{
-		Clone:      handleClone,
-		Exec:       handleExec,
-		Open:       handleOpen,
-		OpenFailed: handleOpenFailed,
-		Syscall:    handleSyscall,
-		Failed:     handleFailed,
+	if *vm {
+		cmd.Sandbox = &sandbox.Sandbox{
+			Mode: sandbox.ModeVM,
+			VM:   &sandbox.VMConfig{ShareRootRO: true},
+		}
+	} else {
+		cmd.Sandbox = &sandbox.Sandbox{
+			Clone:      handleClone,
+			Exec:       handleExec,
+			Open:       handleOpen,
+			OpenFailed: handleOpenFailed,
+			Syscall:    handleSyscall,
+			Failed:     handleFailed,
+		}
 	}
 
 	err := cmd.Run()

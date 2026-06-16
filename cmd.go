@@ -19,6 +19,7 @@ type Cmd struct {
 
 	closeFd int
 	waitCh  chan error
+	vm      *vmRun
 }
 
 func Command(name string, arg ...string) *Cmd {
@@ -82,7 +83,8 @@ func (cmd *Cmd) Run() error {
 	return cmd.Wait()
 }
 
-func (cmd *Cmd) Start() (err error) {
+// applyDefaults fills in the Sandbox and its policies, shared by every mode.
+func (cmd *Cmd) applyDefaults() {
 	if cmd.Sandbox == nil {
 		cmd.Sandbox = &Sandbox{}
 	}
@@ -92,7 +94,19 @@ func (cmd *Cmd) Start() (err error) {
 	if cmd.Sandbox.FS == nil {
 		cmd.Sandbox.FS = DefaultFSPolicy()
 	}
+}
 
+func (cmd *Cmd) Start() error {
+	cmd.applyDefaults()
+	if cmd.Sandbox.Mode == ModeVM {
+		return cmd.startVM()
+	}
+	return cmd.startSeccomp()
+}
+
+// startSeccomp is the default isolation tier: re-exec self as a child that applies
+// seccomp + Landlock, supervised by the parent over a seccomp user notification.
+func (cmd *Cmd) startSeccomp() (err error) {
 	path, err := os.Executable()
 	if err != nil {
 		return err
@@ -215,6 +229,10 @@ func (cmd *Cmd) childFailed(err error) error {
 }
 
 func (cmd *Cmd) Wait() error {
+	if cmd.vm != nil {
+		return cmd.waitVM()
+	}
+
 	err := <-cmd.waitCh
 
 	unix.Close(cmd.closeFd)

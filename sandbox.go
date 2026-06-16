@@ -19,6 +19,12 @@ type Sandbox struct {
 	Filter     map[string]FilterConfig
 	FS         *FSPolicy
 	NoLandlock bool
+
+	// Mode selects the isolation tier. The default, ModeSeccomp, uses the
+	// callbacks and policies above. ModeVM runs the command in a KVM micro-VM
+	// (see VM) and ignores the seccomp-only callbacks.
+	Mode Mode
+	VM   *VMConfig
 }
 
 // FSPolicy declares allow lists for read, write, and execute filesystem access. Each
