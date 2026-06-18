@@ -32,6 +32,7 @@ type childConfig struct {
 	Filter      []unix.SockFilter
 	FS          *FSPolicy
 	WriteAccess uint64
+	ExecuteOnly bool
 }
 
 func recvConfig(fd int) (*childConfig, error) {
@@ -112,7 +113,7 @@ func init() {
 	}
 
 	if cfg.FS != nil {
-		err = landlockApplyFSPolicy(cfg.FS, cfg.WriteAccess)
+		err = landlockApplyFSPolicy(cfg.FS, cfg.WriteAccess, cfg.ExecuteOnly)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sandbox child: landlock: %s\n", err)
 			os.Exit(childLandlockFailed)

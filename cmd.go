@@ -126,19 +126,15 @@ func (cmd *Cmd) Start() (err error) {
 		cmd.Env = os.Environ()
 	}
 
-	fs := cmd.Sandbox.FS
-	if cmd.Sandbox.Mode == SeccompMode {
-		fs = &FSPolicy{Execute: fs.Execute}
-	}
-
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
 		Path:        cmd.Path,
 		Args:        cmd.Args,
 		Env:         cmd.Env,
 		Filter:      makeSockFilter(cmd.Sandbox.Filter),
-		FS:          fs,
+		FS:          cmd.Sandbox.FS,
 		WriteAccess: landlockWriteAccess,
+		ExecuteOnly: cmd.Sandbox.Mode == SeccompMode,
 	}
 
 	cmd.Path = path
