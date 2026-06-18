@@ -75,8 +75,28 @@ func handleFailed(pid uint32, sysnum int, err error) {
 	fmt.Printf("%d: failed: %s: %s\n", pid, sandbox.Sysnums[sysnum], err)
 }
 
+func parseMode(s string) (sandbox.Mode, error) {
+	switch s {
+	case "seccomp":
+		return sandbox.SeccompMode, nil
+	case "landlock":
+		return sandbox.LandlockMode, nil
+	default:
+		return 0, fmt.Errorf("unknown mode %q (want seccomp or landlock)", s)
+	}
+}
+
 func main() {
+	modeArg := flag.String("mode", "seccomp",
+		"sandbox mode: seccomp (proxy opens, landlock for execs) or "+
+			"landlock (landlock for everything, kernel handles opens)")
 	flag.Parse()
+
+	mode, err := parseMode(*modeArg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[0], err)
+		os.Exit(1)
+	}
 
 	args := flag.Args()
 	if len(args) < 1 {
@@ -91,6 +111,7 @@ func main() {
 	cmd.Stderr = os.Stderr
 
 	cmd.Sandbox = &sandbox.Sandbox{
+		Mode:       mode,
 		Clone:      handleClone,
 		Exec:       handleExec,
 		Open:       handleOpen,
@@ -99,7 +120,7 @@ func main() {
 		Failed:     handleFailed,
 	}
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", os.Args[1], err)
 		if exitErr, ok := err.(*exec.ExitError); ok {

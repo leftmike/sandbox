@@ -83,6 +83,10 @@ func (cmd *Cmd) Run() error {
 }
 
 func (cmd *Cmd) Start() (err error) {
+	if !LandlockSupported {
+		return errors.New("landlock not supported by kernel")
+	}
+
 	if cmd.Sandbox == nil {
 		cmd.Sandbox = &Sandbox{}
 	}
@@ -122,21 +126,19 @@ func (cmd *Cmd) Start() (err error) {
 		cmd.Env = os.Environ()
 	}
 
+	fs := cmd.Sandbox.FS
+	if cmd.Sandbox.Mode == SeccompMode {
+		fs = &FSPolicy{Execute: fs.Execute}
+	}
+
 	cmd.Args[0] = cmd.Path
 	cfg := childConfig{
 		Path:        cmd.Path,
 		Args:        cmd.Args,
 		Env:         cmd.Env,
 		Filter:      makeSockFilter(cmd.Sandbox.Filter),
+		FS:          fs,
 		WriteAccess: landlockWriteAccess,
-	}
-
-	if !cmd.Sandbox.NoLandlock {
-		if !LandlockSupported {
-			return errors.New("landlock not supported by kernel")
-		}
-
-		cfg.FS = cmd.Sandbox.FS
 	}
 
 	cmd.Path = path

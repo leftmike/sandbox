@@ -7,6 +7,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+type Mode int
+
+const (
+	SeccompMode Mode = iota
+	LandlockMode
+)
+
 type Sandbox struct {
 	Clone func(pid uint32, sysnum int, flags uint64) bool
 	Exec  func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool
@@ -16,9 +23,9 @@ type Sandbox struct {
 	Syscall    func(pid uint32, sysnum int) bool
 	Failed     func(pid uint32, sysnum int, err error)
 
-	Filter     map[string]FilterConfig
-	FS         *FSPolicy
-	NoLandlock bool
+	Mode   Mode
+	Filter map[string]FilterConfig
+	FS     *FSPolicy
 }
 
 // FSPolicy declares allow lists for read, write, and execute filesystem access. Each
@@ -31,7 +38,6 @@ type FSPolicy struct {
 }
 
 // XXX: if base ends with / then strings.HasPrefix will work
-// XXX: add -no-open-proxy flag to main and Sandbox to disable open proxying
 func pathBeneath(base, path string) bool {
 	rel, err := filepath.Rel(base, path)
 	if err != nil {

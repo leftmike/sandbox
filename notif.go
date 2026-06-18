@@ -177,6 +177,17 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	}
 	abspath := filepath.Join(dir, pathname)
 
+	if cmd.Sandbox.Mode == LandlockMode {
+		if cmd.Sandbox.Open != nil && !cmd.Sandbox.Open(ntf.pid, int(ntf.data.nr),
+			abspath, int32(flags), uint32(mode), resolve) {
+
+			return 0, -int32(unix.EACCES)
+		}
+
+		return 0, continueSyscall
+	}
+
+	// SeccompMode
 	dfd := int(-1)
 	if !filepath.IsAbs(pathname) {
 		var err error
