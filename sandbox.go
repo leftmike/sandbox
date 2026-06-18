@@ -32,18 +32,17 @@ type FSPolicy struct {
 
 // XXX: if base ends with / then strings.HasPrefix will work
 // XXX: add -no-open-proxy flag to main and Sandbox to disable open proxying
-func pathBeneath(base, target string) bool {
-	rel, err := filepath.Rel(base, target)
+func pathBeneath(base, path string) bool {
+	rel, err := filepath.Rel(base, path)
 	if err != nil {
 		return false
 	}
 	return rel == "." || !strings.HasPrefix(rel, "..")
 }
 
-// XXX: rename realpath to path
-func pathsAllows(realpath string, paths []string) bool {
-	for _, path := range paths {
-		if pathBeneath(path, realpath) {
+func pathsAllows(path string, paths []string) bool {
+	for _, base := range paths {
+		if pathBeneath(base, path) {
 			return true
 		}
 	}
@@ -51,14 +50,13 @@ func pathsAllows(realpath string, paths []string) bool {
 	return false
 }
 
-// XXX: rename realpath to path
-func (sb *Sandbox) fsAllows(realpath string, flags uint64) bool {
+func (sb *Sandbox) fsAllows(path string, flags uint64) bool {
 	if flags&unix.O_ACCMODE != unix.O_RDONLY || flags&(unix.O_CREAT|unix.O_TRUNC) != 0 {
-		return pathsAllows(realpath, sb.FS.Write)
+		return pathsAllows(path, sb.FS.Write)
 	}
 
-	return pathsAllows(realpath, sb.FS.Read) || pathsAllows(realpath, sb.FS.Execute) ||
-		pathsAllows(realpath, sb.FS.Write)
+	return pathsAllows(path, sb.FS.Read) || pathsAllows(path, sb.FS.Execute) ||
+		pathsAllows(path, sb.FS.Write)
 }
 
 func DefaultFSPolicy() *FSPolicy {
