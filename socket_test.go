@@ -66,6 +66,7 @@ func TestSocketCreate(t *testing.T) {
 		cmd := sandbox.Command(python, "-c", socketScript,
 			fmt.Sprint(c.fam), fmt.Sprint(c.typ), "127.0.0.1", "127.0.0.1", "9")
 		cmd.Sandbox = &sandbox.Sandbox{
+			NoLandlock: true,
 			Socket: func(pid uint32, sysnum, domain, typ, protocol int) bool {
 				gotDomain, gotType, found = domain, typ, true
 				return true
@@ -94,6 +95,7 @@ s.close()
 	var called bool
 	cmd := sandbox.Command(python, "-c", script)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Socket: func(pid uint32, sysnum, domain, typ, protocol int) bool {
 			called = true
 			return true
@@ -117,6 +119,7 @@ func TestSocketConnect(t *testing.T) {
 		fmt.Sprint(unix.AF_INET), fmt.Sprint(unix.SOCK_DGRAM),
 		want.Addr().String(), "0.0.0.0", fmt.Sprint(want.Port()))
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Connect: func(pid uint32, sysnum, sockfd int, addr netip.AddrPort) bool {
 			got, found = addr, true
 			return true
@@ -142,6 +145,7 @@ func TestSocketBind(t *testing.T) {
 		fmt.Sprint(unix.AF_INET), fmt.Sprint(unix.SOCK_DGRAM),
 		"127.0.0.1", want.Addr().String(), fmt.Sprint(want.Port()))
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Bind: func(pid uint32, sysnum, sockfd int, addr netip.AddrPort) bool {
 			got, found = addr, true
 			return true
@@ -174,6 +178,7 @@ s.close()
 	cmd := sandbox.Command(python, "-c", script,
 		want.Addr().String(), fmt.Sprint(want.Port()))
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Sendto: func(pid uint32, sysnum, sockfd int, addr netip.AddrPort) bool {
 			got, found = addr, true
 			return true
@@ -206,6 +211,7 @@ s.close()
 	cmd := sandbox.Command(python, "-c", script,
 		want.Addr().String(), fmt.Sprint(want.Port()))
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Sendto: func(pid uint32, sysnum, sockfd int, addr netip.AddrPort) bool {
 			got, found = addr, true
 			return true
@@ -274,6 +280,7 @@ func TestSocketSendmmsg(t *testing.T) {
 	cmd := sandbox.Command(python, "-c", sendmmsgScript,
 		fmt.Sprint(want[0].Port()), fmt.Sprint(want[1].Port()))
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Sendto: func(pid uint32, sysnum, sockfd int, addr netip.AddrPort) bool {
 			got = append(got, addr)
 			return true
@@ -301,6 +308,7 @@ s.close()
 	var called bool
 	cmd := sandbox.Command(python, "-c", script, "127.0.0.1", "9")
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Sendto: func(pid uint32, sysnum, sockfd int, addr netip.AddrPort) bool {
 			called = true
 			return true
@@ -334,6 +342,7 @@ s.close()
 	cmd := sandbox.Command(python, "-c", script,
 		deny.Addr().String(), fmt.Sprint(deny.Port()))
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Sendto: func(pid uint32, sysnum, sockfd int, addr netip.AddrPort) bool {
 			if addr == deny {
 				denied = true
@@ -379,6 +388,7 @@ s.close()
 	cmd := sandbox.Command(python, "-c", script,
 		addr.Addr().String(), fmt.Sprint(addr.Port()))
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Connect: func(pid uint32, sysnum, sockfd int, a netip.AddrPort) bool {
 			if a == addr {
 				denied = true
