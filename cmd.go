@@ -93,8 +93,8 @@ func (cmd *Cmd) Start() (err error) {
 	if cmd.Sandbox.Filter == nil {
 		cmd.Sandbox.Filter = DefaultFilterConfig()
 	}
-	if cmd.Sandbox.FS == nil {
-		cmd.Sandbox.FS = DefaultFSPolicy()
+	if cmd.Sandbox.FSP == nil {
+		cmd.Sandbox.FSP = DefaultFSPolicy()
 	}
 
 	path, err := os.Executable()
@@ -132,7 +132,7 @@ func (cmd *Cmd) Start() (err error) {
 		Args:        cmd.Args,
 		Env:         cmd.Env,
 		Filter:      makeSockFilter(cmd.Sandbox.Filter),
-		FS:          cmd.Sandbox.FS,
+		FSP:         cmd.Sandbox.FSP,
 		WriteAccess: landlockWriteAccess,
 		ExecuteOnly: cmd.Sandbox.Mode == SeccompMode,
 	}

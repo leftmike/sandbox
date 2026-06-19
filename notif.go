@@ -234,7 +234,7 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 		return 0, -int32(unix.EACCES)
 	}
 
-	if !cmd.Sandbox.fsAllows(realpath, flags) {
+	if !cmd.Sandbox.FSP.fsAllows(realpath, flags) {
 		if cmd.Sandbox.OpenFailed != nil {
 			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), realpath, unix.EACCES)
 		}

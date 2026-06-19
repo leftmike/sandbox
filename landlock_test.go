@@ -37,14 +37,14 @@ func TestLandlockEnforced(t *testing.T) {
 
 	// Landlock needs the binary itself (and its shared libraries) to be
 	// executable/readable; grant common system locations plus the allowed dir.
-	fs := &sandbox.FSPolicy{
+	fsp := &sandbox.FSPolicy{
 		Read:    []string{"/usr", "/lib", "/lib64", "/etc", allowed},
 		Execute: []string{"/usr"},
 	}
 
 	run := func(target string) error {
 		cmd := sandbox.Command("/bin/cat", filepath.Join(target, "f"))
-		cmd.Sandbox = &sandbox.Sandbox{FS: fs}
+		cmd.Sandbox = &sandbox.Sandbox{FSP: fsp}
 		return cmd.Run()
 	}
 
@@ -81,7 +81,7 @@ func TestLandlockMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fs := &sandbox.FSPolicy{
+	fsp := &sandbox.FSPolicy{
 		Read:    []string{"/usr", "/lib", "/lib64", "/etc", allowed},
 		Execute: []string{"/usr"},
 	}
@@ -92,7 +92,7 @@ func TestLandlockMode(t *testing.T) {
 		cmd := sandbox.Command("/bin/cat", path)
 		cmd.Sandbox = &sandbox.Sandbox{
 			Mode: sandbox.LandlockMode,
-			FS:   fs,
+			FSP:  fsp,
 			Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 				resolve uint64) bool {
 
@@ -137,7 +137,7 @@ func TestLandlockModeDeny(t *testing.T) {
 	cmd := sandbox.Command("/bin/cat", f.Name())
 	cmd.Sandbox = &sandbox.Sandbox{
 		Mode: sandbox.LandlockMode,
-		FS:   fs,
+		FSP:  fs,
 		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
 

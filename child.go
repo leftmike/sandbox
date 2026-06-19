@@ -30,7 +30,7 @@ type childConfig struct {
 	Args        []string
 	Env         []string
 	Filter      []unix.SockFilter
-	FS          *FSPolicy
+	FSP         *FSPolicy
 	WriteAccess uint64
 	ExecuteOnly bool
 }
@@ -112,8 +112,8 @@ func init() {
 		os.Exit(childNoNewPrivsFailed)
 	}
 
-	if cfg.FS != nil {
-		err = landlockApplyFSPolicy(cfg.FS, cfg.WriteAccess, cfg.ExecuteOnly)
+	if cfg.FSP != nil {
+		err = landlockApplyFSPolicy(cfg.FSP, cfg.WriteAccess, cfg.ExecuteOnly)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sandbox child: landlock: %s\n", err)
 			os.Exit(childLandlockFailed)

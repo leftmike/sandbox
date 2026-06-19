@@ -1,7 +1,6 @@
 package sandbox
 
 import (
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -25,7 +24,7 @@ type Sandbox struct {
 
 	Mode   Mode
 	Filter map[string]FilterConfig
-	FS     *FSPolicy
+	FSP    *FSPolicy
 }
 
 // FSPolicy declares allow lists for read, write, and execute filesystem access. Each
@@ -35,20 +34,27 @@ type FSPolicy struct {
 	Read    []string // read-only access
 	Write   []string // read-write access (create, remove, truncate, ...)
 	Execute []string // execute (and read) access
+
+	read  []string
+	write []string
 }
 
-// XXX: if base ends with / then strings.HasPrefix will work
-func pathBeneath(base, path string) bool {
-	rel, err := filepath.Rel(base, path)
-	if err != nil {
-		return false
+func appendSlash(slashed, paths []string) []string {
+	for _, path := range paths {
+		if strings.HasSuffix(path, "/") {
+			slashed = append(slashed, path)
+		} else {
+			slashed = append(slashed, path+"/")
+		}
 	}
-	return rel == "." || !strings.HasPrefix(rel, "..")
+
+	return slashed
 }
 
 func pathsAllows(path string, paths []string) bool {
+	path += "/"
 	for _, base := range paths {
-		if pathBeneath(base, path) {
+		if strings.HasPrefix(path, base) {
 			return true
 		}
 	}
@@ -56,13 +62,20 @@ func pathsAllows(path string, paths []string) bool {
 	return false
 }
 
-func (sb *Sandbox) fsAllows(path string, flags uint64) bool {
-	if flags&unix.O_ACCMODE != unix.O_RDONLY || flags&(unix.O_CREAT|unix.O_TRUNC) != 0 {
-		return pathsAllows(path, sb.FS.Write)
+func (fsp *FSPolicy) fsAllows(path string, flags uint64) bool {
+	if (len(fsp.Read) > 0 || len(fsp.Write) > 0 || len(fsp.Execute) > 0) && len(fsp.write) == 0 {
+		fsp.read = appendSlash(appendSlash(appendSlash([]string{}, fsp.Read), fsp.Execute),
+			fsp.Write)
+	}
+	if len(fsp.Write) > 0 && len(fsp.write) == 0 {
+		fsp.write = appendSlash([]string{}, fsp.Write)
 	}
 
-	return pathsAllows(path, sb.FS.Read) || pathsAllows(path, sb.FS.Execute) ||
-		pathsAllows(path, sb.FS.Write)
+	if flags&unix.O_ACCMODE != unix.O_RDONLY || flags&(unix.O_CREAT|unix.O_TRUNC) != 0 {
+		return pathsAllows(path, fsp.write)
+	}
+
+	return pathsAllows(path, fsp.read)
 }
 
 func DefaultFSPolicy() *FSPolicy {
