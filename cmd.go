@@ -17,7 +17,8 @@ type Cmd struct {
 	Sandbox *Sandbox
 
 	closeFd int
-	waitCh  chan error
+	exitCh  chan error // child result
+	notifCh chan error // listenNotif result
 }
 
 func Command(name string, arg ...string) *Cmd {
@@ -175,19 +176,19 @@ func (cmd *Cmd) Start() (err error) {
 		return err
 	}
 
-	cmd.waitCh = make(chan error, 2)
+	cmd.exitCh = make(chan error, 1)
+	cmd.notifCh = make(chan error, 1)
 	go func() {
 		err := cmd.listenNotif(fd, pipe[0])
-		if err != nil {
-			cmd.waitCh <- err
-		}
 
 		unix.Close(fd)
 		unix.Close(pipe[0])
+
+		cmd.notifCh <- err
 	}()
 
 	go func() {
-		cmd.waitCh <- cmd.waitPidfd(pidfd)
+		cmd.exitCh <- cmd.waitPidfd(pidfd)
 	}()
 
 	cmd.closeFd = pipe[1]
@@ -238,11 +239,15 @@ func (cmd *Cmd) childFailed(err error) error {
 }
 
 func (cmd *Cmd) Wait() error {
-	err := <-cmd.waitCh
+	// First get the exit from the child
+	err := <-cmd.exitCh
 
-	// Stop the notification listener; group teardown and reaping already
-	// happened in waitPidfd.
+	// Stop the notification listener and wait for it to return
 	unix.Close(cmd.closeFd)
+	nerr := <-cmd.notifCh
+	if err == nil {
+		return nerr
+	}
 
 	return err
 }

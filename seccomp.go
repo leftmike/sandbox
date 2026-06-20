@@ -93,7 +93,7 @@ func ioctlNotifRecv(fd int, cancelFd int) (*notif, error) {
 			return nil, err
 		} else if pfds[0].Revents&(unix.POLLHUP|unix.POLLERR) != 0 {
 			return nil, nil
-		} else if pfds[1].Revents&unix.POLLIN != 0 {
+		} else if pfds[1].Revents&(unix.POLLIN|unix.POLLHUP|unix.POLLERR) != 0 {
 			return nil, nil
 		}
 
