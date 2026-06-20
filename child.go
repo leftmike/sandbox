@@ -37,10 +37,12 @@ type childConfig struct {
 }
 
 func recvConfig(fd int) (*childConfig, error) {
-	buf := make([]byte, 1024*64)
-	n, _, _, _, err := unix.Recvmsg(fd, buf, nil, 0)
+	buf := make([]byte, 1024*128)
+	n, _, rf, _, err := unix.Recvmsg(fd, buf, nil, 0)
 	if err != nil {
 		return nil, err
+	} else if rf&unix.MSG_TRUNC != 0 {
+		return nil, fmt.Errorf("recv config: %d bytes exceeds receive buffer", n)
 	}
 
 	var cfg childConfig
