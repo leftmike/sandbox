@@ -142,7 +142,7 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 }
 
 func handlePath(fd int, ntf *notif, dirfd int32, path uint64) (string, string, error) {
-	pathname, err := readString(fd, ntf, path, 2048)
+	pathname, err := readString(fd, ntf, path, 4096)
 	if err != nil {
 		return "", "", fmt.Errorf("read string: %s", err)
 
