@@ -155,17 +155,18 @@ func readString(fd int, ntf *notif, addr, size uint64) (string, error) {
 	return "", errors.New("string not NUL terminated")
 }
 
-func readStringSlice(fd int, ntf *notif, addr, size uint64) ([]string, error) {
+func readStringSlice(fd int, ntf *notif, addr, cnt, size uint64) ([]string, error) {
 	if addr == 0 {
 		return nil, nil
 	}
 
-	buf, err := readMemory(fd, ntf, addr, size)
+	ps := unsafe.Sizeof(addr)
+
+	buf, err := readMemory(fd, ntf, addr, cnt*uint64(ps))
 	if err != nil {
 		return nil, err
 	}
 
-	ps := unsafe.Sizeof(addr)
 	var ret []string
 	for len(buf) >= int(ps) {
 		p := binary.LittleEndian.Uint64(buf)

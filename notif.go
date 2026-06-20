@@ -291,7 +291,7 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 	}
 	abspath := filepath.Join(dir, pathname)
 
-	argv, err := readStringSlice(fd, ntf, args, 4096)
+	argv, err := readStringSlice(fd, ntf, args, 1024*64, 4096)
 	if err != nil {
 		if cmd.Sandbox.Failed != nil {
 			cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),
@@ -300,7 +300,7 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		return 0, -int32(unix.EACCES)
 	}
 
-	envp, err := readStringSlice(fd, ntf, env, 4096)
+	envp, err := readStringSlice(fd, ntf, env, 1024*64, 4096)
 	if err != nil {
 		if cmd.Sandbox.Failed != nil {
 			cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),
