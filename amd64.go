@@ -32,6 +32,12 @@ func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
 }
 
 var (
+	sockFilterArch = []unix.SockFilter{
+		unix.SockFilter{Code: unix.BPF_JMP | unix.BPF_JGE | unix.BPF_K, K: 0x40000000, Jt: 0,
+			Jf: 1},
+		unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_KILL_PROCESS},
+	}
+
 	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_amd64.go
 	Sysnums = []string{
 		unix.SYS_READ:                    "read",

@@ -18,6 +18,8 @@ func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
 }
 
 var (
+	sockFilterArch = []unix.SockFilter{}
+
 	// Copied from golang.org/x/sys@v0.43.0/unix/zsysnum_linux_arm64.go
 	Sysnums = []string{
 		unix.SYS_IO_SETUP:                "io_setup",

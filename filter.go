@@ -41,6 +41,10 @@ func makeSockFilter(cfg map[string]FilterConfig) []unix.SockFilter {
 		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: 0}, // load seccomp_data.nr
 	}
 
+	if len(sockFilterArch) > 0 {
+		fltr = append(fltr, sockFilterArch...)
+	}
+
 	for name, fc := range cfg {
 		sc, ok := syscalls[name]
 		if !ok {
