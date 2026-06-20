@@ -17,7 +17,7 @@ type Cmd struct {
 	Sandbox *Sandbox
 
 	closeFd int
-	exitCh  chan error // child result
+	pidfd   int
 	notifCh chan error // listenNotif result
 }
 
@@ -168,7 +168,7 @@ func (cmd *Cmd) Start() (err error) {
 		return cmd.childFailed(err)
 	}
 
-	pidfd, err := unix.PidfdOpen(cmd.Process.Pid, 0)
+	cmd.pidfd, err = unix.PidfdOpen(cmd.Process.Pid, 0)
 	if err != nil {
 		cmd.Process.Kill()
 		cmd.Cmd.Wait()
@@ -176,7 +176,6 @@ func (cmd *Cmd) Start() (err error) {
 		return err
 	}
 
-	cmd.exitCh = make(chan error, 1)
 	cmd.notifCh = make(chan error, 1)
 	go func() {
 		err := cmd.listenNotif(fd, pipe[0])
@@ -187,28 +186,8 @@ func (cmd *Cmd) Start() (err error) {
 		cmd.notifCh <- err
 	}()
 
-	go func() {
-		cmd.exitCh <- cmd.waitPidfd(pidfd)
-	}()
-
 	cmd.closeFd = pipe[1]
 	return nil
-}
-
-func (cmd *Cmd) waitPidfd(pidfd int) error {
-	pid := cmd.Process.Pid
-
-	pfds := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
-	for {
-		_, err := unix.Poll(pfds, -1)
-		if err == nil || !errors.Is(err, unix.EINTR) {
-			break
-		}
-	}
-	unix.Close(pidfd)
-
-	unix.Kill(-pid, unix.SIGKILL)
-	return cmd.Cmd.Wait()
 }
 
 func (cmd *Cmd) childFailed(err error) error {
@@ -239,8 +218,19 @@ func (cmd *Cmd) childFailed(err error) error {
 }
 
 func (cmd *Cmd) Wait() error {
-	// First get the exit from the child
-	err := <-cmd.exitCh
+	pid := cmd.Process.Pid
+
+	pfds := []unix.PollFd{{Fd: int32(cmd.pidfd), Events: unix.POLLIN}}
+	for {
+		_, err := unix.Poll(pfds, -1)
+		if err == nil || !errors.Is(err, unix.EINTR) {
+			break
+		}
+	}
+	unix.Close(cmd.pidfd)
+
+	unix.Kill(-pid, unix.SIGKILL)
+	err := cmd.Cmd.Wait()
 
 	// Stop the notification listener and wait for it to return
 	unix.Close(cmd.closeFd)
