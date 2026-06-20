@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
-	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -168,6 +167,14 @@ func (cmd *Cmd) Start() (err error) {
 		return cmd.childFailed(err)
 	}
 
+	pidfd, err := unix.PidfdOpen(cmd.Process.Pid, 0)
+	if err != nil {
+		cmd.Process.Kill()
+		cmd.Cmd.Wait()
+
+		return err
+	}
+
 	cmd.waitCh = make(chan error, 2)
 	go func() {
 		err := cmd.listenNotif(fd, pipe[0])
@@ -180,11 +187,27 @@ func (cmd *Cmd) Start() (err error) {
 	}()
 
 	go func() {
-		cmd.waitCh <- cmd.Cmd.Wait()
+		cmd.waitCh <- cmd.waitPidfd(pidfd)
 	}()
 
 	cmd.closeFd = pipe[1]
 	return nil
+}
+
+func (cmd *Cmd) waitPidfd(pidfd int) error {
+	pid := cmd.Process.Pid
+
+	pfds := []unix.PollFd{{Fd: int32(pidfd), Events: unix.POLLIN}}
+	for {
+		_, err := unix.Poll(pfds, -1)
+		if err == nil || !errors.Is(err, unix.EINTR) {
+			break
+		}
+	}
+	unix.Close(pidfd)
+
+	unix.Kill(-pid, unix.SIGKILL)
+	return cmd.Cmd.Wait()
 }
 
 func (cmd *Cmd) childFailed(err error) error {
@@ -217,14 +240,9 @@ func (cmd *Cmd) childFailed(err error) error {
 func (cmd *Cmd) Wait() error {
 	err := <-cmd.waitCh
 
+	// Stop the notification listener; group teardown and reaping already
+	// happened in waitPidfd.
 	unix.Close(cmd.closeFd)
-
-	pid := cmd.Process.Pid
-	syscall.Kill(-pid, syscall.SIGTERM)
-	go func() {
-		time.Sleep(time.Second)
-		syscall.Kill(-pid, syscall.SIGKILL)
-	}()
 
 	return err
 }
