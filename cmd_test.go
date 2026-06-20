@@ -3,6 +3,7 @@ package sandbox_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -467,32 +468,45 @@ func TestRunClone(t *testing.T) {
 }
 
 func TestRunExecLongArgv(t *testing.T) {
-	// More entries than fit in a single pointer-array read, so the slice reader
-	// must advance across blocks instead of truncating.
-	want := []string{"/bin/true"}
-	for i := 0; i < 200; i++ {
-		want = append(want, "arg")
+	cases := []struct {
+		cnt    int
+		failed bool
+	}{
+		{cnt: 256},
+		{cnt: 2048},
+		{cnt: 2049, failed: true},
 	}
-	cmd := sandbox.Command(want[0], want[1:]...)
 
-	var gotArgv []string
-	cmd.Sandbox = &sandbox.Sandbox{
-		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
-			if pathname == want[0] {
-				gotArgv = argv
+	for _, c := range cases {
+		want := []string{"/bin/true"}
+		for i := 1; i < c.cnt; i++ {
+			want = append(want, fmt.Sprintf("arg-%d", i))
+		}
+		cmd := sandbox.Command(want[0], want[1:]...)
+
+		var gotArgv []string
+		cmd.Sandbox = &sandbox.Sandbox{
+			Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
+				if pathname == want[0] {
+					gotArgv = argv
+				}
+				return true
+			},
+		}
+
+		ret, err := exitCode(cmd.Run())
+		if err != nil {
+			t.Errorf("Run() failed with %s", err)
+		} else if ret != 0 {
+			if !c.failed {
+				t.Errorf("Run() got %d want 0", ret)
 			}
-			return true
-		},
-	}
-
-	ret, err := exitCode(cmd.Run())
-	if err != nil {
-		t.Errorf("Run() failed with %s", err)
-	} else if ret != 0 {
-		t.Errorf("Run() got %d want 0", ret)
-	} else if len(gotArgv) != len(want) {
-		t.Errorf("argv length = %d, want %d", len(gotArgv), len(want))
-	} else if !slices.Equal(gotArgv, want) {
-		t.Errorf("argv mismatch")
+		} else if c.failed {
+			t.Error("Run() got 0 want !0")
+		} else if len(gotArgv) != len(want) {
+			t.Errorf("argv length = %d, want %d", len(gotArgv), len(want))
+		} else if !slices.Equal(gotArgv, want) {
+			t.Errorf("argv mismatch")
+		}
 	}
 }

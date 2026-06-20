@@ -94,6 +94,7 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 		if n > 512 {
 			n = 512
 		}
+
 		buf, err := readMemory(fd, ntf, ntf.data.args[0], n)
 		if err != nil || len(buf) < 8 {
 			if cmd.Sandbox.Failed != nil {
@@ -141,8 +142,8 @@ func (cmd *Cmd) handleNotif(fd int, ntf *notif) (int64, int32) {
 	}
 }
 
-func handlePath(fd int, ntf *notif, dirfd int32, path uint64) (string, string, error) {
-	pathname, err := readString(fd, ntf, path, 4096)
+func handlePath(pm procMem, ntf *notif, dirfd int32, path uint64) (string, string, error) {
+	pathname, err := pm.readString(path, 4096)
 	if err != nil {
 		return "", "", fmt.Errorf("read string: %s", err)
 
@@ -168,11 +169,14 @@ func handlePath(fd int, ntf *notif, dirfd int32, path uint64) (string, string, e
 func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 	resolve uint64) (int64, int32) {
 
-	dir, pathname, err := handlePath(fd, ntf, dirfd, path)
+	pm, err := openProcMem(fd, ntf)
 	if err != nil {
-		if cmd.Sandbox.OpenFailed != nil {
-			cmd.Sandbox.OpenFailed(ntf.pid, int(ntf.data.nr), pathname, err)
-		}
+		return 0, -int32(unix.EACCES)
+	}
+	defer pm.mf.Close()
+
+	dir, pathname, err := handlePath(pm, ntf, dirfd, path)
+	if err != nil {
 		return 0, -int32(unix.EACCES)
 	}
 	abspath := filepath.Join(dir, pathname)
@@ -268,6 +272,12 @@ func (cmd *Cmd) handleOpenat(fd int, ntf *notif, dirfd int32, path, flags, mode,
 func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 	flags uint64) (int64, int32) {
 
+	pm, err := openProcMem(fd, ntf)
+	if err != nil {
+		return 0, -int32(unix.EACCES)
+	}
+	defer pm.mf.Close()
+
 	var dir, pathname string
 	if flags&unix.AT_EMPTY_PATH != 0 {
 		var err error
@@ -281,7 +291,7 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		}
 	} else {
 		var err error
-		dir, pathname, err = handlePath(fd, ntf, dirfd, path)
+		dir, pathname, err = handlePath(pm, ntf, dirfd, path)
 		if err != nil {
 			if cmd.Sandbox.Failed != nil {
 				cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr), fmt.Errorf("%s: %s", err, pathname))
@@ -291,7 +301,7 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 	}
 	abspath := filepath.Join(dir, pathname)
 
-	argv, err := readStringSlice(fd, ntf, args, 1024*64, 4096)
+	argv, err := pm.readStringSlice(args, 2048, 4096)
 	if err != nil {
 		if cmd.Sandbox.Failed != nil {
 			cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),
@@ -300,7 +310,7 @@ func (cmd *Cmd) handleExecvat(fd int, ntf *notif, dirfd int32, path, args, env,
 		return 0, -int32(unix.EACCES)
 	}
 
-	envp, err := readStringSlice(fd, ntf, env, 1024*64, 4096)
+	envp, err := pm.readStringSlice(env, 1024, 4096)
 	if err != nil {
 		if cmd.Sandbox.Failed != nil {
 			cmd.Sandbox.Failed(ntf.pid, int(ntf.data.nr),

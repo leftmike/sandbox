@@ -111,28 +111,38 @@ func ioctlNotifRecv(fd int, cancelFd int) (*notif, error) {
 	return (*notif)(unsafe.Pointer(&buf[0])), nil
 }
 
-func readMemory(fd int, ntf *notif, addr, size uint64) ([]byte, error) {
-	f, err := os.OpenFile(fmt.Sprintf("/proc/%d/mem", ntf.pid), os.O_RDONLY, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
+type procMem struct {
+	fd int
+	id uint64
+	mf *os.File
+}
 
-	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
-		uintptr(unsafe.Pointer(&ntf.id)))
+func openProcMem(fd int, ntf *notif) (procMem, error) {
+	mf, err := os.OpenFile(fmt.Sprintf("/proc/%d/mem", ntf.pid), os.O_RDONLY, 0)
+	if err != nil {
+		return procMem{}, err
+	}
+
+	return procMem{fd: fd, id: ntf.id, mf: mf}, nil
+
+}
+
+func (pm *procMem) readMemory(addr, size uint64) ([]byte, error) {
+	_, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(pm.fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
+		uintptr(unsafe.Pointer(&pm.id)))
 	if errno != 0 {
 		return nil, errno
 	}
 
 	buf := make([]byte, size)
-	n, err := f.ReadAt(buf, int64(addr))
+	n, err := pm.mf.ReadAt(buf, int64(addr))
 	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, unix.EIO) {
 		return nil, err
 	}
 	buf = buf[:n]
 
-	_, _, errno = unix.Syscall(unix.SYS_IOCTL, uintptr(fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
-		uintptr(unsafe.Pointer(&ntf.id)))
+	_, _, errno = unix.Syscall(unix.SYS_IOCTL, uintptr(pm.fd), unix.SECCOMP_IOCTL_NOTIF_ID_VALID,
+		uintptr(unsafe.Pointer(&pm.id)))
 	if errno != 0 {
 		return nil, errno
 	}
@@ -140,8 +150,8 @@ func readMemory(fd int, ntf *notif, addr, size uint64) ([]byte, error) {
 	return buf, nil
 }
 
-func readString(fd int, ntf *notif, addr, size uint64) (string, error) {
-	buf, err := readMemory(fd, ntf, addr, size)
+func (pm *procMem) readString(addr, size uint64) (string, error) {
+	buf, err := pm.readMemory(addr, size)
 	if err != nil {
 		return "", err
 	}
@@ -155,34 +165,44 @@ func readString(fd int, ntf *notif, addr, size uint64) (string, error) {
 	return "", errors.New("string not NUL terminated")
 }
 
-func readStringSlice(fd int, ntf *notif, addr, cnt, size uint64) ([]string, error) {
+func (pm *procMem) readStringSlice(addr, cnt, size uint64) ([]string, error) {
 	if addr == 0 {
 		return nil, nil
 	}
 
-	ps := unsafe.Sizeof(addr)
+	sz := unsafe.Sizeof(addr)
 
-	buf, err := readMemory(fd, ntf, addr, cnt*uint64(ps))
+	buf, err := pm.readMemory(addr, (cnt+1)*uint64(sz))
 	if err != nil {
 		return nil, err
 	}
 
 	var ret []string
-	for len(buf) >= int(ps) {
+	for len(buf) >= int(sz) {
 		p := binary.LittleEndian.Uint64(buf)
 		if p == 0 {
-			break
+			return ret, nil
 		}
-		buf = buf[ps:]
+		buf = buf[sz:]
 
-		s, err := readString(fd, ntf, p, size)
+		s, err := pm.readString(p, size)
 		if err != nil {
 			return nil, err
 		}
 		ret = append(ret, s)
 	}
 
-	return ret, nil
+	return nil, fmt.Errorf("read proc memory: more than %d strings in slice", cnt)
+}
+
+func readMemory(fd int, ntf *notif, addr, size uint64) ([]byte, error) {
+	pm, err := openProcMem(fd, ntf)
+	if err != nil {
+		return nil, err
+	}
+	defer pm.mf.Close()
+
+	return pm.readMemory(addr, size)
 }
 
 func ioctlNotifSend(fd int, rsp notifResp) error {
