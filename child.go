@@ -33,6 +33,7 @@ type childConfig struct {
 	FSP         *FSPolicy
 	WriteAccess uint64
 	ExecuteOnly bool
+	NoLandlock  bool
 }
 
 func recvConfig(fd int) (*childConfig, error) {
@@ -112,7 +113,7 @@ func init() {
 		os.Exit(childNoNewPrivsFailed)
 	}
 
-	if cfg.FSP != nil {
+	if cfg.FSP != nil && !cfg.NoLandlock {
 		err = landlockApplyFSPolicy(cfg.FSP, cfg.WriteAccess, cfg.ExecuteOnly)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sandbox child: landlock: %s\n", err)

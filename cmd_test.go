@@ -31,11 +31,13 @@ func TestCommandContext(t *testing.T) {
 
 func TestCmdRun(t *testing.T) {
 	cmd := sandbox.Command("/bin/true")
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	if err := cmd.Run(); err != nil {
 		t.Errorf("Run(/bin/true) = %v, want nil", err)
 	}
 
 	cmd = sandbox.Command("/bin/false")
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	if err := cmd.Run(); err == nil {
 		t.Error("Run(/bin/false) = nil, want error")
 	}
@@ -43,6 +45,7 @@ func TestCmdRun(t *testing.T) {
 
 func TestCmdOutput(t *testing.T) {
 	cmd := sandbox.Command("/bin/echo", "hello")
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("Output() error: %v", err)
@@ -63,6 +66,7 @@ func TestCmdOutputStdoutAlreadySet(t *testing.T) {
 
 func TestCmdCombinedOutput(t *testing.T) {
 	cmd := sandbox.Command("/bin/echo", "hello")
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("CombinedOutput() error: %v", err)
@@ -108,6 +112,7 @@ func TestCmdEnviron(t *testing.T) {
 func TestCmdEnvironPassthrough(t *testing.T) {
 	cmd := sandbox.Command("/bin/sh", "-c", "/usr/bin/echo $FOO")
 	cmd.Env = []string{"FOO=hello"}
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("Output() error: %v", err)
@@ -126,6 +131,7 @@ func TestCmdString(t *testing.T) {
 
 func TestCmdStdoutPipe(t *testing.T) {
 	cmd := sandbox.Command("/usr/bin/echo", "hello")
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatalf("StdoutPipe() error: %v", err)
@@ -147,6 +153,7 @@ func TestCmdStdoutPipe(t *testing.T) {
 
 func TestCmdStderrPipe(t *testing.T) {
 	cmd := sandbox.Command("/bin/sh", "-c", "/usr/bin/echo error >&2")
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	pipe, err := cmd.StderrPipe()
 	if err != nil {
 		t.Fatalf("StderrPipe() error: %v", err)
@@ -168,6 +175,7 @@ func TestCmdStderrPipe(t *testing.T) {
 
 func TestCmdStdinPipe(t *testing.T) {
 	cmd := sandbox.Command("/bin/cat")
+	cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatalf("StdinPipe() error: %v", err)
@@ -216,6 +224,7 @@ func TestRun(t *testing.T) {
 
 	for _, c := range cases {
 		cmd := sandbox.Command(c.cmd)
+		cmd.Sandbox = &sandbox.Sandbox{NoLandlock: true}
 
 		ret, err := exitCode(cmd.Run())
 		if err != nil {
@@ -240,6 +249,7 @@ func TestRunOpen(t *testing.T) {
 	cmd := sandbox.Command("/bin/cat", f.Name())
 	cmd.Stdout = &buf
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
 
@@ -264,6 +274,7 @@ func TestRunOpen(t *testing.T) {
 
 	cmd = sandbox.Command("/bin/cat", f.Name())
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
 
@@ -289,6 +300,7 @@ func TestRunExec(t *testing.T) {
 	cmd := sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				found = true
@@ -313,6 +325,7 @@ func TestRunExec(t *testing.T) {
 	cmd = sandbox.Command("/bin/echo", "hello")
 	cmd.Stdout = &buf
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				return false
@@ -338,6 +351,7 @@ func TestRunExecArgv(t *testing.T) {
 
 	var gotArgv []string
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/echo" {
 				gotArgv = argv
@@ -363,6 +377,7 @@ func TestRunExecEnv(t *testing.T) {
 
 	var gotEnv []string
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == "/bin/true" {
 				gotEnv = env
@@ -396,6 +411,7 @@ t.join()
 	var threadCloned bool
 	cmd := sandbox.Command(python, "-c", script)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Clone: func(pid uint32, sysnum int, flags uint64) bool {
 			if flags&unix.CLONE_THREAD != 0 {
 				threadCloned = true
@@ -418,6 +434,7 @@ func TestRunClone(t *testing.T) {
 	var cloned bool
 	cmd := sandbox.Command("/bin/sh", "-c", "/bin/true")
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Clone: func(pid uint32, sysnum int, flags uint64) bool {
 			cloned = true
 			return true
@@ -435,6 +452,7 @@ func TestRunClone(t *testing.T) {
 
 	cmd = sandbox.Command("/bin/sh", "-c", "/bin/true")
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Clone: func(pid uint32, sysnum int, flags uint64) bool {
 			return false
 		},

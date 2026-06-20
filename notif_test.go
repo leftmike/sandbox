@@ -22,6 +22,7 @@ func TestOpenatAbsolute(t *testing.T) {
 	var found bool
 	cmd := sandbox.Command("/bin/cat", want)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
 
@@ -53,6 +54,7 @@ func TestOpenatATFDCWD(t *testing.T) {
 	cmd := sandbox.Command("/bin/cat", name)
 	cmd.Dir = dir
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
 
@@ -100,6 +102,7 @@ os.close(dirfd)
 	var found bool
 	cmd := sandbox.Command(python, "-c", script, dir, name)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
 
@@ -151,6 +154,7 @@ func TestExecveatRelative(t *testing.T) {
 	var found bool
 	cmd := sandbox.Command(python, "-c", script)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
 				found = true
@@ -166,6 +170,7 @@ func TestExecveatRelative(t *testing.T) {
 
 	cmd = sandbox.Command(python, "-c", script)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			return pathname != truePath
 		},
@@ -197,6 +202,7 @@ func TestExecveatATEmptyPath(t *testing.T) {
 	var found bool
 	cmd := sandbox.Command(python, "-c", script)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			if pathname == truePath {
 				found = true
@@ -212,6 +218,7 @@ func TestExecveatATEmptyPath(t *testing.T) {
 
 	cmd = sandbox.Command(python, "-c", script)
 	cmd.Sandbox = &sandbox.Sandbox{
+		NoLandlock: true,
 		Exec: func(pid uint32, sysnum int, pathname string, argv []string, env []string) bool {
 			return pathname != truePath
 		},

@@ -22,9 +22,10 @@ type Sandbox struct {
 	Syscall    func(pid uint32, sysnum int) bool
 	Failed     func(pid uint32, sysnum int, err error)
 
-	Mode   Mode
-	Filter map[string]FilterConfig
-	FSP    *FSPolicy
+	Mode       Mode
+	Filter     map[string]FilterConfig
+	FSP        *FSPolicy
+	NoLandlock bool
 }
 
 // FSPolicy declares allow lists for read, write, and execute filesystem access. Each

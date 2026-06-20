@@ -83,13 +83,14 @@ func (cmd *Cmd) Run() error {
 }
 
 func (cmd *Cmd) Start() (err error) {
-	if !LandlockSupported {
-		return errors.New("landlock not supported by kernel")
-	}
-
 	if cmd.Sandbox == nil {
 		cmd.Sandbox = &Sandbox{}
 	}
+
+	if !cmd.Sandbox.NoLandlock && !LandlockSupported {
+		return errors.New("landlock not supported by kernel")
+	}
+
 	if cmd.Sandbox.Filter == nil {
 		cmd.Sandbox.Filter = DefaultFilterConfig()
 	}
@@ -135,6 +136,7 @@ func (cmd *Cmd) Start() (err error) {
 		FSP:         cmd.Sandbox.FSP,
 		WriteAccess: landlockWriteAccess,
 		ExecuteOnly: cmd.Sandbox.Mode == SeccompMode,
+		NoLandlock:  cmd.Sandbox.NoLandlock,
 	}
 
 	cmd.Path = path
