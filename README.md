@@ -28,6 +28,10 @@ exit code back to the host over `vsock`. `FSPolicy` degrades to mount scope in a
 VM: `Write` roots become writable shares, `Read`/`Execute` become read-only, and
 unexported paths are simply absent.
 
+On amd64 the guest boots QEMU's minimal `microvm` machine when the host QEMU
+supports it (faster boot, virtio-mmio devices), falling back to `q35`; set
+`VMConfig.Machine` to force a machine type (e.g. `"q35"`).
+
 Requirements: `/dev/kvm` (typically the `kvm` group, not root), a
 `qemu-system-$arch` binary, and a host kernel with virtio-9p/-fs and vsock (stock
 distro kernels qualify). Tests that need a VM skip cleanly when `/dev/kvm` is

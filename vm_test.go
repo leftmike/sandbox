@@ -120,6 +120,55 @@ func TestQemuArgs(t *testing.T) {
 	}
 }
 
+func TestQemuArgsMicrovm(t *testing.T) {
+	d := &qemuDriver{path: "qemu-system-x86_64", machine: "microvm,pic=on,pit=on,rtc=on"}
+	spec := vmSpec{
+		kernel:    "/boot/vmlinuz",
+		initramfs: "/tmp/guest.cpio",
+		memoryMiB: 256,
+		vcpus:     1,
+		cid:       9,
+		cmdline:   "console=ttyS0 init=/init",
+		shares:    []Share{{HostPath: "/", Tag: "root", Writable: false}},
+	}
+
+	joined := strings.Join(d.qemuArgs(spec), " ")
+
+	for _, want := range []string{
+		"-machine microvm,pic=on,pit=on,rtc=on",
+		"vhost-vsock-device,guest-cid=9",
+		"virtio-9p-device,fsdev=fsdev0,mount_tag=root",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("microvm args missing %q in:\n%s", want, joined)
+		}
+	}
+
+	// microvm must not emit the PCI device variants.
+	for _, bad := range []string{"vhost-vsock-pci", "virtio-9p-pci"} {
+		if strings.Contains(joined, bad) {
+			t.Errorf("microvm args unexpectedly contain PCI variant %q", bad)
+		}
+	}
+}
+
+func TestIsMicrovm(t *testing.T) {
+	for _, c := range []struct {
+		machine string
+		want    bool
+	}{
+		{"microvm", true},
+		{"microvm,pic=on", true},
+		{"q35", false},
+		{"virt", false},
+		{"", false},
+	} {
+		if got := isMicrovm(c.machine); got != c.want {
+			t.Errorf("isMicrovm(%q) = %v, want %v", c.machine, got, c.want)
+		}
+	}
+}
+
 func TestSynthExitError(t *testing.T) {
 	if err := synthExitError(0); err != nil {
 		t.Errorf("synthExitError(0) = %v, want nil", err)

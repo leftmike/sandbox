@@ -29,6 +29,7 @@ const (
 // or defaulted (see vmDefaults).
 type VMConfig struct {
 	Hypervisor    string        // qemu-system-* binary; "" => auto-detect for GOARCH
+	Machine       string        // -machine type; "" => auto (microvm on amd64 when supported, else q35; virt on arm64)
 	KernelPath    string        // bzImage/vmlinuz; "" => /boot/vmlinuz-$(uname -r)
 	InitramfsPath string        // guest-agent initramfs; "" => built on demand
 	MemoryMiB     int           // guest RAM; 0 => 256
@@ -158,7 +159,7 @@ func (cmd *Cmd) startVM() error {
 	}
 	cfg := vc.withDefaults()
 
-	drv, err := newQemuDriver(cfg.Hypervisor)
+	drv, err := newQemuDriver(cfg.Hypervisor, cfg.Machine)
 	if err != nil {
 		return err
 	}
@@ -320,7 +321,9 @@ func (cmd *Cmd) waitVM() error {
 			run.conn.Close()
 		}
 		run.listener.Close()
-		// Ensure QEMU is gone, then reap it.
+		// Ensure QEMU is gone, then reap it. This is also the backstop for
+		// machines without ACPI (microvm), where the guest's reboot(POWER_OFF)
+		// may not make QEMU exit on its own.
 		run.handle.proc.Kill()
 		<-run.handle.waitErr
 	}()

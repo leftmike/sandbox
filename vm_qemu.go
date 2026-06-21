@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/leftmike/sandbox/internal/initramfs"
@@ -34,12 +35,12 @@ func qemuBinaryForArch() (string, string, error) {
 	}
 }
 
-func newQemuDriver(hint string) (*qemuDriver, error) {
+func newQemuDriver(hint, machine string) (*qemuDriver, error) {
 	if !kvmAvailable() {
 		return nil, errors.New("sandbox: /dev/kvm not available")
 	}
 
-	name, machine, err := qemuBinaryForArch()
+	name, defMachine, err := qemuBinaryForArch()
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +51,40 @@ func newQemuDriver(hint string) (*qemuDriver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sandbox: qemu not found: %w", err)
 	}
+
+	switch {
+	case machine != "":
+		// Caller forced a machine type (e.g. "q35" to opt out of microvm).
+	case runtime.GOARCH == "amd64" && qemuSupportsMachine(path, "microvm"):
+		// Prefer the minimal, fast-booting microvm machine. Keep the legacy PIC
+		// and timers enabled so a stock host kernel still boots.
+		machine = "microvm,pic=on,pit=on,rtc=on"
+	default:
+		machine = defMachine
+	}
+
 	return &qemuDriver{path: path, machine: machine}, nil
+}
+
+// qemuSupportsMachine reports whether the qemu binary advertises a machine type,
+// by parsing `qemu -machine help`.
+func qemuSupportsMachine(path, name string) bool {
+	out, err := exec.Command(path, "-machine", "help").Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if fields := strings.Fields(line); len(fields) > 0 && fields[0] == name {
+			return true
+		}
+	}
+	return false
+}
+
+// isMicrovm reports whether a -machine value selects the microvm machine, which
+// uses virtio-mmio rather than PCI for its devices.
+func isMicrovm(machine string) bool {
+	return machine == "microvm" || strings.HasPrefix(machine, "microvm,")
 }
 
 // kvmAvailable reports whether hardware virtualization is usable: /dev/kvm exists
@@ -108,8 +142,14 @@ func allocCID() uint32 {
 // qemuArgs builds the qemu-system argv for a spec. Pure and dependency-free so it
 // can be unit-tested without KVM.
 func (d *qemuDriver) qemuArgs(spec vmSpec) []string {
+	// microvm uses virtio-mmio; PCI machines (q35/virt) use the *-pci variants.
+	vsockDev, p9Dev := "vhost-vsock-pci", "virtio-9p-pci"
+	if isMicrovm(d.machine) {
+		vsockDev, p9Dev = "vhost-vsock-device", "virtio-9p-device"
+	}
+
 	args := []string{
-		"-machine", spec.machineOr(d.machine),
+		"-machine", d.machine,
 		"-enable-kvm",
 		"-cpu", "host",
 		"-m", strconv.Itoa(spec.memoryMiB),
@@ -121,7 +161,7 @@ func (d *qemuDriver) qemuArgs(spec vmSpec) []string {
 		"-kernel", spec.kernel,
 		"-initrd", spec.initramfs,
 		"-append", spec.cmdline,
-		"-device", "vhost-vsock-pci,guest-cid=" + strconv.FormatUint(uint64(spec.cid), 10),
+		"-device", vsockDev + ",guest-cid=" + strconv.FormatUint(uint64(spec.cid), 10),
 	}
 	for i, s := range spec.shares {
 		id := "fsdev" + strconv.Itoa(i)
@@ -131,15 +171,11 @@ func (d *qemuDriver) qemuArgs(spec vmSpec) []string {
 		}
 		args = append(args,
 			"-fsdev", fsdev,
-			"-device", "virtio-9p-pci,fsdev="+id+",mount_tag="+s.Tag,
+			"-device", p9Dev+",fsdev="+id+",mount_tag="+s.Tag,
 		)
 	}
 	return args
 }
-
-// machineOr lets a spec override the driver's default machine type (unused today;
-// hook for a future microvm path).
-func (spec vmSpec) machineOr(def string) string { return def }
 
 func (d *qemuDriver) boot(spec vmSpec) (*vmHandle, error) {
 	c := exec.Command(d.path, d.qemuArgs(spec)...)
