@@ -44,8 +44,8 @@ type Sandbox struct {
 // the policy restricts.
 type FSPolicy struct {
 	Read    []string // read-only access
-	Write   []string // read-write access (create, remove, truncate, ...)
 	Execute []string // execute (and read) access
+	Write   []string // read-write access (create, remove, truncate, ...)
 }
 
 // DefaultFSPolicy returns a permissive but reasonable landlock allow-list for
@@ -59,17 +59,17 @@ type FSPolicy struct {
 // landlock); assign it explicitly, e.g. sb.FS = sandbox.DefaultFSPolicy().
 func DefaultFSPolicy() *FSPolicy {
 	return &FSPolicy{
+		// Configuration and read-only runtime state (e.g. /etc/passwd,
+		// /etc/ssl, /etc/resolv.conf, /proc/self/..., NSS data under /run).
+		Read: []string{
+			"/etc", "/opt", "/proc", "/sys", "/run", "/var",
+		},
 		// Executables and shared libraries. Library directories need execute
 		// access too: landlock requires LANDLOCK_ACCESS_FS_EXECUTE to mmap a
 		// shared object with PROT_EXEC, which the dynamic loader does.
 		Execute: []string{
 			"/bin", "/sbin", "/usr",
 			"/lib", "/lib32", "/lib64", "/libx32",
-		},
-		// Configuration and read-only runtime state (e.g. /etc/passwd,
-		// /etc/ssl, /etc/resolv.conf, /proc/self/..., NSS data under /run).
-		Read: []string{
-			"/etc", "/opt", "/proc", "/sys", "/run", "/var",
 		},
 		// Scratch space. /dev is included so common device nodes such as
 		// /dev/null, /dev/zero, and /dev/urandom can be written as well as read.
