@@ -101,18 +101,18 @@ func landlockApplyAccess(fd int, paths []string, access uint64, strict bool) err
 	return nil
 }
 
-func landlockApplyFSPolicy(fs *FSPolicy, writeAccess uint64, executeOnly bool) error {
+func landlockApplyFSPolicy(fsp *FSPolicy, writeAccess uint64, executeOnly bool) error {
 	var handledAccess uint64
 	if executeOnly {
 		handledAccess = unix.LANDLOCK_ACCESS_FS_EXECUTE
 	} else {
-		if len(fs.Read) > 0 {
+		if len(fsp.Read) > 0 {
 			handledAccess |= landlockReadAccess
 		}
-		if len(fs.Write) > 0 {
+		if len(fsp.Write) > 0 {
 			handledAccess |= writeAccess
 		}
-		if len(fs.Execute) > 0 {
+		if len(fsp.Execute) > 0 {
 			handledAccess |= landlockExecuteAccess
 		}
 	}
@@ -124,20 +124,20 @@ func landlockApplyFSPolicy(fs *FSPolicy, writeAccess uint64, executeOnly bool) e
 	defer unix.Close(fd)
 
 	if executeOnly {
-		err = landlockApplyAccess(fd, fs.Execute, unix.LANDLOCK_ACCESS_FS_EXECUTE, false)
+		err = landlockApplyAccess(fd, fsp.Execute, unix.LANDLOCK_ACCESS_FS_EXECUTE, false)
 		if err != nil {
 			return err
 		}
 	} else {
-		err = landlockApplyAccess(fd, fs.Read, landlockReadAccess, false)
+		err = landlockApplyAccess(fd, fsp.Read, landlockReadAccess, false)
 		if err != nil {
 			return err
 		}
-		err = landlockApplyAccess(fd, fs.Write, writeAccess, false)
+		err = landlockApplyAccess(fd, fsp.Write, writeAccess, false)
 		if err != nil {
 			return err
 		}
-		err = landlockApplyAccess(fd, fs.Execute, landlockExecuteAccess, false)
+		err = landlockApplyAccess(fd, fsp.Execute, landlockExecuteAccess, false)
 		if err != nil {
 			return err
 		}

@@ -131,13 +131,13 @@ func TestLandlockModeDeny(t *testing.T) {
 	f.Close()
 	defer os.Remove(f.Name())
 
-	fs := sandbox.DefaultFSPolicy()
-	fs.Read = append(fs.Read, f.Name())
+	fsp := sandbox.DefaultFSPolicy()
+	fsp.Read = append(fsp.Read, f.Name())
 
 	cmd := sandbox.Command("/bin/cat", f.Name())
 	cmd.Sandbox = &sandbox.Sandbox{
 		Mode: sandbox.LandlockMode,
-		FSP:  fs,
+		FSP:  fsp,
 		Open: func(pid uint32, sysnum int, pathname string, flags int32, mode uint32,
 			resolve uint64) bool {
 
