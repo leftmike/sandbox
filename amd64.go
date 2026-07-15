@@ -27,7 +27,6 @@ func (cmd *Cmd) handleNotifArch(fd int, ntf *notif) (int64, int32) {
 			return 0, continueSyscall
 		}
 		return 0, -int32(unix.EACCES)
-
 	}
 }
 
