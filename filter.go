@@ -56,22 +56,13 @@ func makeSockFilter(cfg map[string]FilterConfig) []unix.SockFilter {
 		fltr = sockFilterAction(fltr, name, fc)
 	}
 
+	fc, ok := cfg["default"]
+	if ok {
+		return sockFilterAction(fltr, "default", fc)
+	}
+
 	return append(fltr,
 		unix.SockFilter{Code: unix.BPF_RET | unix.BPF_K, K: unix.SECCOMP_RET_ALLOW})
-}
-
-func NotifFilterConfig() map[string]FilterConfig {
-	return map[string]FilterConfig{
-		"clone":    {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"clone3":   {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"execve":   {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"execveat": {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"fork":     {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"open":     {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"openat":   {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"openat2":  {Action: unix.SECCOMP_RET_USER_NOTIF},
-		"vfork":    {Action: unix.SECCOMP_RET_USER_NOTIF},
-	}
 }
 
 func DefaultFilterConfig() map[string]FilterConfig {
